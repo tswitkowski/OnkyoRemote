@@ -1,0 +1,44 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+   xmlns:tools="http://schemas.android.com/tools"
+   android:id="@+id/receiver_detail"
+   style="?android:attr/textAppearanceLarge"
+   android:layout_width="match_parent"
+   android:layout_height="match_parent"
+   android:gravity="center_horizontal"
+   android:orientation="vertical"
+   android:padding="16dp"
+   android:textIsSelectable="true"
+   tools:context=".ReceiverDetailFragment" >
+
+    <Button
+       android:id="@+id/powerOnButton"
+       android:layout_width="match_parent"
+       android:layout_height="wrap_content"
+       android:text="Power On" />
+
+    <Button
+       android:id="@+id/powerOffButton"
+       android:layout_width="match_parent"
+       android:layout_height="wrap_content"
+       android:text="Power Off" />
+
+    <Button
+       android:id="@+id/inputAuxButton"
+       android:layout_width="match_parent"
+       android:layout_height="wrap_content"
+       android:text="Aux Input" />
+
+    <Button
+       android:id="@+id/inputBdButton"
+       android:layout_width="match_parent"
+       android:layout_height="wrap_content"
+       android:text="BD Input" />
+
+    <Button
+       android:id="@+id/connectButton"
+       android:layout_width="match_parent"
+       android:layout_height="wrap_content"
+       android:text="Connect/Disconnect" />
+    
+</LinearLayout>
+
