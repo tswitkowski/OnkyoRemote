@@ -58,7 +58,7 @@ public class ReceiverListActivity extends FragmentActivity implements ReceiverLi
          // fragment transaction.
          Bundle arguments = new Bundle();
          arguments.putString(ReceiverDetailFragment.ARG_ITEM_ID, id);
-         ReceiverDetailFragment fragment = new ReceiverDetailFragment();
+         ReceiverDetailFragment fragment = new ReceiverDetailFragment(this);
          fragment.setArguments(arguments);
          getSupportFragmentManager().beginTransaction().replace(R.id.receiver_detail_container, fragment).commit();
 

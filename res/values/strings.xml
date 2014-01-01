@@ -3,5 +3,28 @@
 
    <string name="app_name">OnkyoRemote</string>
    <string name="title_receiver_detail">Receiver Detail</string>
+   <string-array name="input_strings">
+      <item>DVR</item>
+      <item>Satellite</item>
+      <item>Game</item>
+      <item>Aux</item>
+      <item>Video5</item>
+      <item>Computer</item>
+      <item>Bluray</item>
+      <item>Tape1</item>
+      <item>Tape2</item>
+      <item>Phono</item>
+      <item>CD</item>
+      <item>FM</item>
+      <item>AM</item>
+      <item>Tuner</item>
+      <item>Musicserver</item>
+      <item>Interetradio</item>
+      <item>USB</item>
+      <item>USB Back</item>
+      <item>Network</item>
+      <item>Multich</item>
+      <item>Sirius</item>
+   </string-array>
 
 </resources>

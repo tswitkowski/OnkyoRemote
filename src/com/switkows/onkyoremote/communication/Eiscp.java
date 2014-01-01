@@ -38,6 +38,8 @@ import java.net.*;
 import java.util.HashMap;
 //import java.util.TreeSet;
 import java.util.Iterator;
+import java.util.Locale;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.Vector;
 
@@ -95,13 +97,20 @@ public class Eiscp
   private boolean connected_ = false;
 
   /** Maps the class contant vars to the eiscp command string. **/
-  private static HashMap<Integer, String> commandMap_ = null;
+  public static HashMap<Integer, String> commandMap_ = null;
+  public static HashMap<String, Integer> commandMapInverse_ = null;
 
   /** Maps a Readable string to a corresponding class var. **/
-  private static HashMap<String, Integer> commandNameMap_ = null;
+  public static HashMap<String, Integer> commandNameMap_ = null;
 
   /** Var to hold the volume level to or from a message. **/
   private static int volume_ = 32;
+  
+  /** Var to hold the power status **/
+  private boolean powered_on_ = false;
+
+  /** Var to hold mute status **/
+  private boolean muted_     = false;
 
   private static StringBuffer helpMsg_ = new StringBuffer(SYSTEM_LINE_SEPERATOR);
 
@@ -142,8 +151,19 @@ public class Eiscp
       receiverPort_=eiscpPort;
   }
 
+  //simple method which returns whether the socket is currently connected or not
   public boolean isConnected() {
      return connected_;
+  }
+
+  //overwriteable method which prints a message to STDERR by default
+  public void errorMessage(String message) {
+     System.err.println(message);
+  }
+
+  //overwriteable method which prints a message to STDOUT by default
+  public void debugMessage(String message) {
+     System.out.println(message);
   }
   /** Makes Chocolate glazed doughnuts. **/
   public void setReceiverIP( String ip) { receiverIP_ = ip;}
@@ -179,23 +199,23 @@ public class Eiscp
     {
       //1. creating a socket to connect to the server
       eiscpSocket_ = new Socket(ip, eiscpPort);
-      System.out.println("Connected to "+ip+" on port "+eiscpPort);
+      debugMessage("Connected to "+ip+" on port "+eiscpPort);
       //2. get Input and Output streams
       out_ = new ObjectOutputStream(eiscpSocket_.getOutputStream());
       in_ = new DataInputStream(eiscpSocket_.getInputStream());
 
-      //System.out.println("out_Init");
+      //debugMessage("out_Init");
       out_.flush();
-      // System.out.println("inInit");
+      // debugMessage("inInit");
       connected_ = true;
     }
     catch(UnknownHostException unknownHost)
     {
-      System.err.println("You are trying to connect to an unknown host!");
+      errorMessage("You are trying to connect to an unknown host!");
     }
     catch(IOException ioException)
     {
-      System.err.println("Can't Connect: "+ioException.getMessage());
+      errorMessage("Can't Connect: "+ioException.getMessage());
     }
     return connected_;
   }
@@ -234,11 +254,11 @@ public class Eiscp
       }
       catch(UnknownHostException unknownHost)
       {
-        System.err.println("You are trying to connect to an unknown host!");
+        errorMessage("You are trying to connect to an unknown host!");
       }
       catch(IOException ioException)
       {
-        System.err.println("Can't Connect: "+ioException.getMessage());
+        errorMessage("Can't Connect: "+ioException.getMessage());
       }
     }
     return retVal;
@@ -258,7 +278,7 @@ public class Eiscp
       if (in_!=null) {in_.close();in_=null;acted = true;}
       if (out_!=null) {out_.close();out_=null;acted = true;}
       if (eiscpSocket_!=null) {eiscpSocket_.close();eiscpSocket_=null;acted = true;}
-      if (acted) System.out.println("closed connections");
+      if (acted) debugMessage("closed connections");
       connected_ = false;
     }
     catch(IOException ioException)
@@ -273,7 +293,7 @@ public class Eiscp
    * @param String holding the string to convert to HEX
    * @return a string holding the HEX representation of the passed in decimal str.
    **/
-  public static String convertStringToHex(String str)
+  public String convertStringToHex(String str)
   {
      return convertStringToHex( str, false);
   }
@@ -284,12 +304,12 @@ public class Eiscp
    * @param boolean flag to turn some debug output on/off
    * @return a string holding the HEX representation of the passed in str.
    **/
-  public static String convertStringToHex(String str,  boolean dumpOut)
+  public String convertStringToHex(String str,  boolean dumpOut)
   {
     char[] chars = str.toCharArray();
     String out_put = "";
 
-    if (dumpOut) System.out.println("    Ascii: "+str);
+    if (dumpOut) debugMessage("    Ascii: "+str);
     if (dumpOut) System.out.print("    Hex: ");
     StringBuffer hex = new StringBuffer();
     for(int i = 0; i < chars.length; i++)
@@ -299,7 +319,7 @@ public class Eiscp
       hex.append(out_put);
       if (dumpOut) System.out.print("0x"+(out_put.length()==1?"0":"")+ out_put+" ");
     }
-    if (dumpOut) System.out.println("");
+    if (dumpOut) debugMessage("");
 
     return hex.toString();
   }
@@ -310,27 +330,30 @@ public class Eiscp
    * @param boolean flag to turn some debug output on/off
    * @return an int holding the decimal equivalent of the passed in HEX numberStr.
    **/
-  public static int convertHexNumberStringToDecimal(String str,  boolean dumpOut)
+  public int convertHexNumberStringToDecimal(char[] chars,  boolean dumpOut) {
+     String out_put = "";
+
+//     if (dumpOut) debugMessage("        Ascii: "+str);
+     if (dumpOut) System.out.print(  "          Hex: 0x");
+     StringBuffer hex = new StringBuffer();
+     String hexInt = new String();
+     for(int i = 0; i < chars.length; i++)
+     {
+       out_put = Integer.toHexString((int)chars[i]);
+       if (out_put.length()==1) hex.append("0");
+       hex.append(out_put);
+       if (dumpOut) System.out.print((out_put.length()==1?"0":"")+ out_put);
+     }
+     hexInt = ""+(Integer.parseInt( hex.toString(), 16));
+     if (dumpOut) debugMessage("");
+     if (dumpOut) debugMessage( "      Decimal: "+hexInt.toString());
+
+     return Integer.parseInt(hexInt.toString());
+  }
+  public int convertHexNumberStringToDecimal(String str,  boolean dumpOut)
   {
     char[] chars = str.toCharArray();
-    String out_put = "";
-
-    if (dumpOut) System.out.println("        Ascii: "+str);
-    if (dumpOut) System.out.print(  "          Hex: 0x");
-    StringBuffer hex = new StringBuffer();
-    String hexInt = new String();
-    for(int i = 0; i < chars.length; i++)
-    {
-      out_put = Integer.toHexString((int)chars[i]);
-      if (out_put.length()==1) hex.append("0");
-      hex.append(out_put);
-      if (dumpOut) System.out.print((out_put.length()==1?"0":"")+ out_put);
-    }
-    hexInt = ""+(Integer.parseInt( hex.toString(), 16));
-    if (dumpOut) System.out.println("");
-    if (dumpOut) System.out.println( "      Decimal: "+hexInt.toString());
-
-    return Integer.parseInt(hexInt.toString());
+    return convertHexNumberStringToDecimal(chars, dumpOut);
   }
 
 
@@ -338,7 +361,7 @@ public class Eiscp
    * @param byte holding the HEX string to convert back to decimal
    * @return a string holding the HEX representation of the passed in str.
    **/
-  public static String convertHexToString(byte hex)
+  public String convertHexToString(byte hex)
   {
     byte [] bytes = {hex};
     return convertHexToString( new String(bytes), false);
@@ -348,7 +371,7 @@ public class Eiscp
    * @param String holding the HEX string to convert back to decimal
    * @return a string holding the HEX representation of the passed in str.
    **/
-  public static String convertHexToString(String hex)
+  public String convertHexToString(String hex)
   {
     return convertHexToString( hex, false);
   }
@@ -359,7 +382,7 @@ public class Eiscp
    * @param boolean flag to turn some debug output on/off
    * @return a string holding the HEX representation of the passed in str.
    **/
-  public static String convertHexToString(String hex,  boolean dumpOut)
+  public String convertHexToString(String hex,  boolean dumpOut)
   {
 
     StringBuilder sb = new StringBuilder();
@@ -380,7 +403,7 @@ public class Eiscp
 
         temp.append(decimal);
     }
-    if (dumpOut) System.out.println("    Decimal : " + temp.toString());
+    if (dumpOut) debugMessage("    Decimal : " + temp.toString());
 
     return sb.toString();
   }
@@ -445,8 +468,8 @@ public class Eiscp
     // msg end - EOF
     sb.append((char)Integer.parseInt("0D", 16));
 
-    System.out.println("  eISCP data size: "+eiscpDataSize +"(0x"+Integer.toHexString(eiscpDataSize) +") chars");
-    System.out.println("  eISCP msg size: "+sb.length() +"(0x"+Integer.toHexString(sb.length()) +") chars");
+    debugMessage("  eISCP data size: "+eiscpDataSize +"(0x"+Integer.toHexString(eiscpDataSize) +") chars");
+    debugMessage("  eISCP msg size: "+sb.length() +"(0x"+Integer.toHexString(sb.length()) +") chars");
 
     return sb;
   }
@@ -477,7 +500,7 @@ public class Eiscp
     {
       try
       {
-        System.out.println("  sending "+sb.length() +" chars: ");
+        debugMessage("  sending "+sb.length() +" chars: ");
         convertStringToHex(sb.toString(), true);
         //out_.writeObject(sb.toString());
         //out_.writeChars(sb.toString());
@@ -485,7 +508,11 @@ public class Eiscp
         //out_.writeBytes(convertStringToHex(sb.toString(), false));
         //out_.writeChars(convertStringToHex(sb.toString(), false));
         out_.flush();
-        System.out.println("sent!" );
+        debugMessage("sent!" );
+        if(command == POWER_ON)
+           setPoweredOn(true);
+        else if(command == POWER_OFF)
+           setPoweredOn(false);
       }
       catch(IOException ioException)
       {
@@ -568,7 +595,7 @@ public class Eiscp
     int totBytesReceived = 0;
 //    int i=0;
     int packetCounter=0;
-//    int headerSizeDecimal;
+    int headerSizeDecimal;
     int dataSizeDecimal = 0;
     char endChar1 ='!';// NR-5008 response sends 3 chars to terminate the packet - 0x1a 0x0d 0x0a
     char endChar2 ='!';
@@ -578,7 +605,7 @@ public class Eiscp
     {
       try
       {
-        if (debugging) System.out.println("\nReading Response Packet");
+        if (debugging) debugMessage("\nReading Response Packet");
         eiscpSocket_.setSoTimeout(socketTimeOut_); // this must be set or the following read will BLOCK / hang the method when the messages are done
         
         while((numBytesReceived = in_.read(responseBytes))>0)
@@ -600,16 +627,16 @@ public class Eiscp
               numBytesReceived = in_.read(responseBytes);
             if (debugging) System.out.print(" "+numBytesReceived);
           }
-          if (debugging) System.out.println();
+          if (debugging) debugMessage(null);
           convertStringToHex(msgBuffer.toString(), debugging);
           
           /* Response is done... process it into dataMessages */
           // *******************************************
           char [] responseChars = msgBuffer.toString().toCharArray(); // use the charArray to step through
           int responseByteCnt = 0;
-//          char versionChar = '1';
-//          char dataStartChar = '!';
-//          char dataUnitChar = '1';
+          char versionChar = '1';
+          char dataStartChar = '!';
+          char dataUnitChar = '1';
           
           // loop through all the chars and split out the dataMessages
           while (responseByteCnt< totBytesReceived)
@@ -619,40 +646,40 @@ public class Eiscp
             responseByteCnt+=4;
             
             // read headerSize
-//            char [] headerSizeBytes = {responseChars[responseByteCnt++],
-//                                       responseChars[responseByteCnt++],
-//                                       responseChars[responseByteCnt++],
-//                                       responseChars[responseByteCnt++]} ;
+            char [] headerSizeBytes = {responseChars[responseByteCnt++],
+                                       responseChars[responseByteCnt++],
+                                       responseChars[responseByteCnt++],
+                                       responseChars[responseByteCnt++]} ;
             // 4 char Big Endian data size
             char [] dataSizeBytes = { responseChars[responseByteCnt++],
                                       responseChars[responseByteCnt++],
                                       responseChars[responseByteCnt++],
                                       responseChars[responseByteCnt++]} ;
-            if (debugging) System.out.println(" -HeaderSize-");
+            if (debugging) debugMessage(" -HeaderSize-");
 //            headerSizeDecimal = convertHexNumberStringToDecimal(new String(headerSizeBytes),debugging);
-            if (debugging) System.out.println(" -DataSize-");
+            if (debugging) debugMessage(" -DataSize-");
             dataSizeDecimal = convertHexNumberStringToDecimal(new String(dataSizeBytes),debugging);
                                       
             // version
-//            versionChar = responseChars[responseByteCnt++];
+            versionChar = responseChars[responseByteCnt++];
             
             // 3 reserved bytes
             responseByteCnt+=3;
             int dataByteCnt = 0;
             
             // Now the data message
-//            dataStartChar = responseChars[responseByteCnt++]; // parse and throw away (like parsley)
-//            dataUnitChar = responseChars[responseByteCnt++]; // dito
+            dataStartChar = responseChars[responseByteCnt++]; // parse and throw away (like parsley)
+            dataUnitChar = responseChars[responseByteCnt++]; // dito
             char [] dataMessage = new char [dataSizeDecimal];
             
             /* Get the dataMessage from this response */
             // NR-5008 response sends 3 chars to terminate the packet - so DON't include them in the message
-            while( dataByteCnt < (dataSizeDecimal-3) && responseByteCnt< (totBytesReceived-3))
+            while( dataByteCnt < (dataSizeDecimal-5) && responseByteCnt< (totBytesReceived-3))
             {
               dataMessage[dataByteCnt++] = responseChars[responseByteCnt++];
             }
-            if (debugging) System.out.println(" -DataMessage-");
-            if (debugging) System.out.println("    "+(new String(dataMessage))+ "\n");
+            if (debugging) debugMessage(" -DataMessage-");
+            if (debugging) debugMessage("    "+(new String(dataMessage))+ "\n");
             retVal.addElement(new String(dataMessage));
             
             // Read the end packet char(s) "[EOF]"
@@ -666,7 +693,7 @@ public class Eiscp
             if (endChar1 == (char)Integer.parseInt("1A", 16) &&
                 endChar2 == (char)Integer.parseInt("0D", 16) &&
                 endChar3 == (char)Integer.parseInt("0A", 16) 
-               ) if (debugging) System.out.println(" EndOfPacket["+packetCounter+"]\n");
+               ) if (debugging) debugMessage(" EndOfPacket["+packetCounter+"]\n");
             packetCounter++;
           }// 
           
@@ -675,11 +702,11 @@ public class Eiscp
       }
       catch( java.net.SocketTimeoutException  noMoreDataException)
       {
-        if (debugging) System.out.println("Response Done: " );
+        if (debugging) debugMessage("Response Done: " );
       }
       catch(EOFException  eofException)
       {
-        System.out.println("received: \""+retVal+"\"" );
+        debugMessage("received: \""+retVal+"\"" );
       }
       catch(IOException ioException)
       {
@@ -687,7 +714,7 @@ public class Eiscp
       }
     }
     else
-      System.out.println("!!Not Connected to Receive ");    
+      debugMessage("!!Not Connected to Receive ");    
     return retVal;
   }
 
@@ -835,19 +862,19 @@ public class Eiscp
   /**  
    * Class main commandLine entry method.
    **/
-  public static void main(String [] args)
+  public void main(String [] args)
   {
 //    final String methodName = CLASSNAME + ": main()";
     Eiscp instance = new Eiscp(DEFAULT_EISCP_IP, DEFAULT_EISCP_PORT);
 
     /* Simple way af parsing the args */
     if (args ==null || args.length<1)
-      System.out.println(getHelpMsgStr());
+      debugMessage(getHelpMsgStr());
     else
     {
       if (args[0].equals("test"))
       {
-        System.out.println("Testing Eiscp");
+        debugMessage("Testing Eiscp");
         instance.sendQueryCommand(VOLUME_QUERY);
         instance.sendCommand(MUTE);
         instance.sleep(750);
@@ -859,12 +886,12 @@ public class Eiscp
         int command = -1;
         String commandStr = "";
         // TODO: Set up a loop to handle multiple commands/args in one run with one socket connection
-        command =instance.getCommand(args[0].toUpperCase());  //returns -1 if not found
+        command =instance.getCommand(args[0].toUpperCase(Locale.ENGLISH));  //returns -1 if not found
         commandStr=instance.getCommandStr(command);
         
         /* Special case VOLUME_SET command needs to parse a parameter. */
         if ( command == VOLUME_SET ) instance.setVolume(Integer.parseInt(args[1]));
-        System.out.println("command: "+commandStr);
+        debugMessage("command: "+commandStr);
 
         String queryResponse = "";
         if (command!=-1)
@@ -877,14 +904,14 @@ public class Eiscp
             System.out.print("Responses: \n" +queryResponse);
             if (queryResponse!=null && !queryResponse.equals(""))
             {
-              System.out.println(instance.getCommandName(queryResponse.trim()));
+              debugMessage(instance.getCommandName(queryResponse.trim()));
               if (command==NETUSB_PLAY_STATUS_QUERY)
               {
-                System.out.println(instance.decipherUsbPlayStatusResponse(queryResponse));
+                debugMessage(instance.decipherUsbPlayStatusResponse(queryResponse));
               }
             }
             else
-              System.out.println("\n"+ args[0]+"("+commandStr +") response: EMPTY");
+              debugMessage("\n"+ args[0]+"("+commandStr +") response: EMPTY");
           }
           
           /* It is a basic change setting command (with no response) */
@@ -915,6 +942,37 @@ public class Eiscp
     volume_ = volume;
   }
 
+  /** get the class powered_on_.
+   * 
+   * @return the powered_on_ status
+   */
+  public boolean getPoweredOn() {
+    return powered_on_;
+  }
+
+  /** sets the class powered_on_.
+   * 
+   * @param the powered_on status
+   */
+  public void setPoweredOn(boolean powered_on) {
+    powered_on_ = powered_on;
+  }
+
+  /** get the class muted_.
+   * 
+   * @return the muted_ status
+   */
+  public boolean getMuted() {
+    return muted_;
+  }
+
+  /** sets the class muted_.
+   * 
+   * @param the muted status
+   */
+  public void setMuted(boolean muted) {
+    muted_ = muted;
+  }
 
   /** searches for the commandName that is associated with the passed command.
    * @param commandStr the iscp command to get a commandName key
@@ -985,12 +1043,14 @@ private void initCommandMap()
   {
     commandNameMap_ = new HashMap<String, Integer>(eCnt);
     commandMap_ = new HashMap<Integer, String>(eCnt);
+    commandMapInverse_ = new HashMap<String, Integer>(eCnt);
 
     commandNameMap_.put("POWER_OFF", POWER_OFF);
     commandNameMap_.put("POWER_ON", POWER_ON);
     commandNameMap_.put("POWER_QUERY", POWER_QUERY);
     commandNameMap_.put("UNMUTE", UNMUTE);
     commandNameMap_.put("MUTE", MUTE);
+    commandNameMap_.put("MUTE_TOGGLE", MUTE_TOGGLE);
     commandNameMap_.put("MUTE_QUERY", MUTE_QUERY);
     commandNameMap_.put("VOLUME_UP", VOLUME_UP);
     commandNameMap_.put("VOLUME_DOWN", VOLUME_DOWN);
@@ -1095,12 +1155,20 @@ private void initCommandMap()
     commandNameMap_.put("NETUSB_SONG_ELAPSEDTIME_QUERY", NETUSB_SONG_ELAPSEDTIME_QUERY);
     commandNameMap_.put("NETUSB_SONG_TRACK_QUERY", NETUSB_SONG_TRACK_QUERY);
     commandNameMap_.put("NETUSB_PLAY_STATUS_QUERY" , NETUSB_PLAY_STATUS_QUERY);
+    commandNameMap_.put("OSD_UP" , DIRECTION_UP);
+    commandNameMap_.put("OSD_DOWN" , DIRECTION_DOWN);
+    commandNameMap_.put("OSD_LEFT" , DIRECTION_LEFT);
+    commandNameMap_.put("OSD_RIGHT" , DIRECTION_RIGHT);
+    commandNameMap_.put("OSD_ENTER" , BUTTON_ENTER);
+    commandNameMap_.put("OSD_EXIT" , BUTTON_EXIT);
+    commandNameMap_.put("OSD_MENU" , BUTTON_MENU);
 
     commandMap_.put(POWER_OFF, "PWR00");
     commandMap_.put(POWER_ON , "PWR01");
     commandMap_.put(POWER_QUERY , "PWRQSTN");
     commandMap_.put(UNMUTE      , "AMT00");
     commandMap_.put(MUTE        , "AMT01");
+    commandMap_.put(MUTE_TOGGLE , "AMTTG");
     commandMap_.put(MUTE_QUERY  , "AMTQSTN");
     commandMap_.put(VOLUME_UP   , "MVLUP");
     commandMap_.put(VOLUME_DOWN , "MVLDOWN");
@@ -1201,6 +1269,19 @@ private void initCommandMap()
     commandMap_.put(NETUSB_SONG_ELAPSEDTIME_QUERY, "NTMQSTN");
     commandMap_.put(NETUSB_SONG_TRACK_QUERY, "NTRQSTN");
     commandMap_.put(NETUSB_PLAY_STATUS_QUERY , "NSTQSTN");
+    commandMap_.put(DIRECTION_UP, "OSDUP");
+    commandMap_.put(DIRECTION_DOWN, "OSDDOWN");
+    commandMap_.put(DIRECTION_LEFT, "OSDLEFT");
+    commandMap_.put(DIRECTION_RIGHT, "OSDRIGHT");
+    commandMap_.put(BUTTON_ENTER, "OSDENTER");
+    commandMap_.put(BUTTON_EXIT, "OSDEXIT");
+    commandMap_.put(BUTTON_MENU, "OSDMENU");
+
+    Set<Integer> keys = commandMap_.keySet();
+    for(Iterator<Integer> iterator = keys.iterator(); iterator.hasNext();) {
+      Integer key = (Integer)iterator.next();
+      commandMapInverse_.put(commandMap_.get(key), key);
+    }
   }
 
 
@@ -1216,6 +1297,8 @@ private void initCommandMap()
       public static final int UNMUTE       = eCnt++;
       /** Command Class Constant mapped to its corresponding iscp command. **/
       public static final int MUTE         = eCnt++;
+      /** Command Class Constant mapped to its corresponding iscp command. **/
+      public static final int MUTE_TOGGLE  = eCnt++;
       /** Command Class Constant mapped to its corresponding iscp command. **/
       public static final int MUTE_QUERY    = eCnt++;
       /** Command Class Constant mapped to its corresponding iscp command. **/
@@ -1384,7 +1467,7 @@ private void initCommandMap()
       public static final int NETUSB_SONG_ELAPSEDTIME_QUERY = eCnt++;
       /** NET/USB Track Info (Current Track/Toral Track Max 9999). **/
       public static final int NETUSB_SONG_TRACK_QUERY = eCnt++;
-
+      
       /** NET/USB Play Status QUERY (3 letters - PRS).<UL>
        * <LI>p -> Play Status: "S": STOP, "P": Play, "p": Pause, "F": FF, "R": FREW</LI>
        * <LI>r -> Repeat Status: "-": Off, "R": All, "F": Folder, "1": Repeat 1</LI>
@@ -1392,5 +1475,24 @@ private void initCommandMap()
        **/
       public static final int NETUSB_PLAY_STATUS_QUERY = eCnt++; //NET/USB Track Info (Current Track/Toral Track Max 9999)
 
+      //Movement commands
+
+      public static final int BUTTON_0       = eCnt++;
+      public static final int BUTTON_1       = eCnt++;
+      public static final int BUTTON_2       = eCnt++;
+      public static final int BUTTON_3       = eCnt++;
+      public static final int BUTTON_4       = eCnt++;
+      public static final int BUTTON_5       = eCnt++;
+      public static final int BUTTON_6       = eCnt++;
+      public static final int BUTTON_7       = eCnt++;
+      public static final int BUTTON_8       = eCnt++;
+      public static final int BUTTON_9       = eCnt++;
+      public static final int DIRECTION_UP   = eCnt++;
+      public static final int DIRECTION_DOWN = eCnt++;
+      public static final int DIRECTION_LEFT = eCnt++;
+      public static final int DIRECTION_RIGHT= eCnt++;
+      public static final int BUTTON_ENTER   = eCnt++;
+      public static final int BUTTON_EXIT    = eCnt++;
+      public static final int BUTTON_MENU    = eCnt++;
 
 } // class

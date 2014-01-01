@@ -1,17 +1,27 @@
 package com.switkows.onkyoremote;
 
+import android.annotation.SuppressLint;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentActivity;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
+import android.widget.AdapterView.OnItemSelectedListener;
 import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.Spinner;
 import android.widget.TextView;
 
 import com.switkows.onkyoremote.communication.Eiscp;
 import com.switkows.onkyoremote.communication.ReceiverClient;
+import com.switkows.onkyoremote.communication.ReceiverClient.CommandHandler;
 import com.switkows.onkyoremote.dummy.DummyContent;
 
 /**
@@ -19,7 +29,8 @@ import com.switkows.onkyoremote.dummy.DummyContent;
  * This fragment is either contained in a {@link ReceiverListActivity} in two-pane mode (on tablets) or a
  * {@link ReceiverDetailActivity} on handsets.
  */
-public class ReceiverDetailFragment extends Fragment {
+@SuppressLint("ValidFragment")
+public class ReceiverDetailFragment extends Fragment implements CommandHandler {
    /**
     * The fragment argument representing the item ID that this fragment
     * represents.
@@ -34,12 +45,17 @@ public class ReceiverDetailFragment extends Fragment {
     * The dummy content this fragment is presenting.
     */
    private DummyContent.DummyItem mItem;
+   
+   private FragmentActivity mParent;//pointer to parent (for callbacks, etc)
 
    /**
     * Mandatory empty constructor for the fragment manager to instantiate the
     * fragment (e.g. upon screen orientation changes).
     */
-   public ReceiverDetailFragment() {
+   
+   public ReceiverDetailFragment() {}
+   public ReceiverDetailFragment(FragmentActivity parent) {
+      mParent = parent;
    }
 
    @Override
@@ -57,6 +73,27 @@ public class ReceiverDetailFragment extends Fragment {
          else
             isCommandFragment = false;
       }
+      if(isCommandFragment)
+         setHasOptionsMenu(true);
+   }
+
+   private Menu mMenu;//save pointer, so we can overwrite icons/text later
+   @Override
+   public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+//      MenuInflater inflater = getMenuInflater();
+      inflater.inflate(R.menu.main_menu, menu);
+      mMenu = menu;
+      super.onCreateOptionsMenu(menu, inflater);
+   }
+
+   @Override
+   public boolean onOptionsItemSelected(MenuItem item) {
+      switch(item.getItemId()) {
+         case R.id.connectActionButton:
+            toggleConnection();
+            return true;
+      }
+      return super.onOptionsItemSelected(item);
    }
 
    @Override
@@ -65,55 +102,45 @@ public class ReceiverDetailFragment extends Fragment {
       if(isCommandFragment) {
          rootView = inflater.inflate(R.layout.fragment_commands, container, false);
          //start connection
-         eISCPInterface = new ReceiverClient(ReceiverClient.DEFAULT_IP_ADDR,ReceiverClient.DEFAULT_TCP_PORT);//FIXME - make IP address & port number configurable
-         eISCPInterface.connectSocketThread();
+         eISCPInterface = new ReceiverClient(this,ReceiverClient.DEFAULT_IP_ADDR,ReceiverClient.DEFAULT_TCP_PORT);//FIXME - make IP address & port number configurable
+         eISCPInterface.initiateConnection();
          //connect eventListeners to buttons
-         Button button;
-         button = (Button)rootView.findViewById(R.id.powerOffButton);
-         button.setOnClickListener(new OnClickListener() {
+         View view;
+         //FIXME - this fires once on initial load, which causes the receiver to turn on if it is currently off
+         view = rootView.findViewById(R.id.inputSelector);
+         view.setEnabled(false); //disable by default. once the connection to the server has been established and the value queried, the field will be enabled
+         ((Spinner)view).setOnItemSelectedListener(new OnItemSelectedListener() {
             @Override
-            public void onClick(View v) {
-               eISCPInterface.sendCommand(Eiscp.POWER_OFF);
-               Log.v("TJS","Sent power-off");
+            public void onItemSelected(AdapterView<?> arg0, View arg1, int arg2, long arg3) {
+               //Note : only has an effect if the power is already on (this may not be desirable...
+               //       I will later change to set the value of the Array to the current input
+               //       value, on startup, so we don't turn on device upon app powerup)
+               if(eISCPInterface.getPoweredOn())
+                  eISCPInterface.sendCommand(Eiscp.SOURCE_DVR + arg2);//FIXME - apply proper addition. This seems to work, but it's not very robust
+            }
+            @Override
+            public void onNothingSelected(AdapterView<?> arg0) {
             }
          });
-         button = (Button)rootView.findViewById(R.id.powerOnButton);
-         button.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-               eISCPInterface.sendCommand(Eiscp.POWER_ON);
-               Log.v("TJS","Sent power-on");
-            }
-         });
-         button = (Button)rootView.findViewById(R.id.inputAuxButton);
-         button.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-               eISCPInterface.sendCommand(Eiscp.SOURCE_AUX);
-               Log.v("TJS","Set source to Aux");
-            }
-         });
-         button = (Button)rootView.findViewById(R.id.inputBdButton);
-         button.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-               eISCPInterface.sendCommand(Eiscp.SOURCE_BLURAY);
-               Log.v("TJS","Set source to BluRay");
-            }
-         });
-         button = (Button)rootView.findViewById(R.id.connectButton);
-         button.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-               if(eISCPInterface.isConnected()) {
-                  eISCPInterface.closeSocket();
-                  Log.v("TJS","Dis-connected");
-               } else {
-                  eISCPInterface.connectSocketThread();
-                  Log.v("TJS","Connected");
+
+         //dynamically add buttons (saves copy/paste in layout file as well as attaching event handlers)
+         LinearLayout layout = (LinearLayout)rootView.findViewById(R.id.buttons);
+         String[] labels = {"Power On","Power Off","Volume Up", "Volume Down", "Mute/Unmute", "Up", "Down",
+                            "Left", "Right", "Enter", "Exit", "Menu"};
+         final int[] commands = {Eiscp.POWER_ON, Eiscp.POWER_OFF, Eiscp.VOLUME_UP, Eiscp.VOLUME_DOWN, Eiscp.MUTE_TOGGLE, Eiscp.DIRECTION_UP, Eiscp.DIRECTION_DOWN,
+                                 Eiscp.DIRECTION_LEFT, Eiscp.DIRECTION_RIGHT, Eiscp.BUTTON_ENTER, Eiscp.BUTTON_EXIT, Eiscp.BUTTON_MENU};
+         for(int i=0 ; i < labels.length ; i++) {
+            Button button = new Button(container.getContext());
+            button.setText(labels[i]);
+            button.setId(commands[i]);
+            button.setOnClickListener(new OnClickListener() {
+               @Override
+               public void onClick(View v) {
+                  eISCPInterface.sendCommand(v.getId());
                }
-            }
-         });
+            });
+            layout.addView(button);
+         }
       }
       else {
          rootView = inflater.inflate(R.layout.fragment_receiver_detail, container, false);
@@ -126,11 +153,67 @@ public class ReceiverDetailFragment extends Fragment {
 
       return rootView;
    }
-   
-//   private CommandHandler messageHandler = new CommandHandler();
-   
-   public interface CommandHandler {
-      public void onMessageSent(String message);
-      public void onMessageReceived(String message, String response);
+
+   @Override
+   public void onMessageSent(String message) {
+      // TODO Auto-generated method stub
+      
+   }
+
+   @Override
+   public void onMessageReceived(String message, String response) {
+      // TODO Auto-generated method stub
+      
+   }
+
+   @Override
+   public void onInputChange(int sourceVal) {
+      // TODO Auto-generated method stub
+      Spinner view = (Spinner)this.getView().findViewById(R.id.inputSelector);
+//      view.setEnabled(true);//FIXME - only set to TRUE if it was previously false?
+      Log.v("TJS","Received "+sourceVal);
+      view.setSelection(sourceVal-Eiscp.SOURCE_DVR);//FIXME - apply proper addition. This seems to work, but it's not very robust
+   }
+
+   @Override
+   public void onPowerChange(boolean powered_on) {
+      // TODO Auto-generated method stub
+   }
+
+   public void toggleConnection() {
+      if(eISCPInterface != null) {
+         if(eISCPInterface.isConnected()) {
+            eISCPInterface.closeSocket();
+            Log.v("TJS","Dis-connected");
+         } else {
+            eISCPInterface.initiateConnection();
+            Log.v("TJS","Connected");
+         }
+      }
+   }
+
+   @Override
+   public void onConnectionChange(boolean isConnected) {
+      if(mParent != null && mParent instanceof CommandHandler)
+         ((CommandHandler)mParent).onConnectionChange(isConnected);
+      //overwrite menu icon
+      //FIXME - for some reason, on a one-pane configuration, this is triggered before mMenu is defined...
+      if(mMenu != null) {
+         MenuItem item = mMenu.findItem(R.id.connectActionButton);
+         if(isConnected) {
+            item.setIcon(android.R.drawable.presence_online);
+            item.setTitle("Disconnect from Server");
+         } else {
+            item.setIcon(android.R.drawable.stat_notify_sync_noanim);
+            item.setTitle("Connect to Server");
+         }
+      }
+      View view = this.getView().findViewById(R.id.inputSelector);
+      view.setEnabled(isConnected);
+   }
+   @Override
+   public void onMuteChange(boolean muted) {
+      // TODO Auto-generated method stub
+      
    }
 }

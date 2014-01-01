@@ -1,61 +1,139 @@
 package com.switkows.onkyoremote.communication;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-import java.net.Socket;
-
+import android.os.AsyncTask;
+import android.support.v4.app.Fragment;
 import android.util.Log;
 
 /***
- * Provides TCP/IP Communication interface to Server (Receiver)
+ * Shim around Eiscp class, to provide usefull wrappers to better handle Android connection
 ***/
+//FIXME - can/should I build this into a content provider? I'm guessing not (since it complicates queries a bit)
 public class ReceiverClient extends Eiscp {
    public static final String DEFAULT_IP_ADDR = "16.1.1.200";
    public static final int DEFAULT_TCP_PORT   = Eiscp.DEFAULT_EISCP_PORT;
-   private final String ipAddr;
-   private final int tcpPort;
-   private boolean isRunning = false;
-   
-   private PrintWriter mSender;
-//   private final OnMessageReceived messageListener;
-   private Socket mClientSocket;
+   public final Fragment mParent;
 
-   public ReceiverClient(String ip_addr, int port) {
+   public ReceiverClient(Fragment parent,String ip_addr, int port) {
       super(ip_addr,port);
-      ipAddr = ip_addr;
-      tcpPort = port;
-//      messageListener = listener;
-      //FIXME - move to the thread?
-//      try {
-//         mClientSocket = new Socket(ipAddr, tcpPort);
-//      } catch (Exception e) {
-//         Log.e("ReceiverClient",e.toString());
-//         e.printStackTrace();
-//      }
+      mParent = parent;
+   }
+
+   /**
+    * Initializes variables (like power status, input selection, volume, etc)
+    * and opens the socket to the server (AV Receiver)
+    */
+   public void initiateConnection() {
+      new AsyncTask<Void,Void,Void>() {
+
+         @Override
+         protected Void doInBackground(Void... params) {
+            //make connection
+            boolean connected = connectSocket();
+            //Now, collect a bit of information of the current state from the server (AV Receiver)
+            if(connected) {
+               Log.v("TJS","Connected..");
+               QueryServerTask query;
+               Log.v("TJS","Querying power status..");
+               query = new QueryServerTask(ReceiverClient.this);
+               query.execute(String.valueOf(POWER_QUERY));
+               //FIXME - unify into one thread?
+               Log.v("TJS","Querying source status..");
+               query = new QueryServerTask(ReceiverClient.this);
+               query.execute(String.valueOf(SOURCE_QUERY));
+//               query.execute(String.valueOf(VOLUME_QUERY));
+            }
+            return null;
+         }
+
+         @Override
+         protected void onPostExecute(Void result) {
+            connectionStateChanged();//FIXME - will this execute too soon (i.e. before all queries are completed)?
+            super.onPostExecute(result);
+         }
+      }.execute();
+      ;
+   }
+
+   public void connectionStateChanged() {
+      Log.v("TJS","Calling connectionStateChanged : connected = "+isConnected());
+      if(mParent != null && mParent instanceof CommandHandler)
+         ((CommandHandler)mParent).onConnectionChange(isConnected());
    }
 
    //Override Eiscp methods to wrap execution in thread (to disconnect from UI)
    public void sendCommand(final int command) {
-      new Thread() {
-         public void run() {
+      new AsyncTask<Void,Void,Void>() {
+         @Override
+         protected Void doInBackground(Void... params) {
             ReceiverClient.super.sendCommand(command);
+            return null;
          }
-      }.start();
+
+         @Override
+         protected void onPostExecute(Void result) {
+            connectionStateChanged();//FIXME - will this execute too soon (i.e. before all queries are completed)?
+            super.onPostExecute(result);
+         }
+      }.execute();
    }
    
-   public boolean closeSocket() {
-      new Thread() {
-         public void run() {
-            ReceiverClient.super.closeSocket();
+   //FIXME - change to AsyncTask?
+   public String sendQueryCommand(final int command, final boolean closeSocket) {
+      QueryServerTask query = new QueryServerTask(this);
+      query.execute(String.valueOf(command));
+      return null;
+   }
+   
+   public void postQueryResults(String queryResult) {
+      Log.d("TJS","Query Result : '"+queryResult+"'...");
+//      String[] resultParnts = queryResult.split("/\n");
+//      if(queryResult.split(regularExpression))
+      if(mParent instanceof CommandHandler ) {
+         CommandHandler parent = (CommandHandler)mParent;
+         if(queryResult.contains("PWR")) {
+            String resultStr = queryResult.substring(3, 5);
+            int value = Integer.parseInt(resultStr);
+            Log.v("TJS","Power query result = '"+value+"'");
+            parent.onPowerChange(value == 1);
+            setPoweredOn(value==1);
+         } else if(queryResult.contains("VOL")) {
+         } else if(queryResult.contains("AMT")) {
+            String resultStr = queryResult.substring(3, 5);
+            int value = Integer.parseInt(resultStr);
+            Log.v("TJS","Muted query result = '"+value+"'");
+            parent.onMuteChange(value == 1);
+            setMuted(value==1);
+         } else if(queryResult.contains("SLI")) {
+            String resultStr = queryResult.substring(0, 5);
+//            int value = Integer.parseInt(resultStr);
+//            Log.v("TJS","Input query result = '"+value+"'");
+            if(commandMapInverse_.containsKey(resultStr)) {
+               parent.onInputChange(commandMapInverse_.get(resultStr));
+            }
          }
-      }.start();
+      }
+   }
+
+   //FIXME - use AsyncTask rather than Thread? this would allow publishing status back
+   //to the caller (but I'm not sure this is really necessary for this application)
+   public boolean closeSocket() {
+      new AsyncTask<Void,Void,Void>() {
+         @Override
+         protected Void doInBackground(Void... params) {
+            ReceiverClient.super.closeSocket();
+            return null;
+         };
+         @Override
+         protected void onPostExecute(Void result) {
+            connectionStateChanged();
+         }
+      }.execute();
       return false;//FIXME - return value not truly returned to caller
    }
-   
+
+   //FIXME - use AsyncTask rather than Thread? this would allow publishing status back
+   //to the caller (but I'm not sure this is really necessary for this application)
+   //FIXME - upon connection, query for current power status & 
    public boolean connectSocketThread() {
       new Thread() {
          public void run() {
@@ -64,39 +142,45 @@ public class ReceiverClient extends Eiscp {
       }.start();
       return true;//FIXME - return value not truly returned to caller
    }
-//   public void run() {
-//      if(mClientSocket != null && mClientSocket.isConnected()) {
-//         try {
-//            mSender = new PrintWriter(new BufferedWriter(new OutputStreamWriter(mClientSocket.getOutputStream())),true);
-//            BufferedReader mReceiver = new BufferedReader(new InputStreamReader(mClientSocket.getInputStream()));
-//            while(isRunning) {
-//               String message = mReceiver.readLine();
-////               if(message != null && messageListener != null) {
-////                  messageListener.onMessageReceived(message);
-////               }
-//            }
-//         } catch (Exception e) {
-//            Log.e("ReceiverClient","Connection not opened or message not received correctly: "+e.toString());
-//         } finally {
-//            try {
-//               mClientSocket.close();
-//            } catch (IOException e) {
-//               Log.e("ReceiverClient","Connection could not be closed: "+e.toString());
-//            }
-//         }
-//      } else {
-//         Log.v("ReceiverClient","Socket not connected correctly...");
-//      }
-//   }
-//   
-//   public void sendMessage(String message) {
-//      if(mSender != null && !mSender.checkError()) {
-//         mSender.println(message);
-//         mSender.flush();
-//      }
-//   }
-//   
-//   private interface OnMessageReceived {
-//      public void onMessageReceived(String message);
-//   }
+
+   //redirect messages to Log.e() instead of System.err
+   public void errorMessage(String message) {
+      Log.e("ReceiverClient",message);
+   }
+
+   //redirect messages to Log.v() instead of System.out
+   public void debugMessage(String message) {
+      Log.v("ReceiverClient",message);
+   }
+   
+   protected class QueryServerTask extends AsyncTask<String, Void, String> {
+
+      private final ReceiverClient mParent;
+      public QueryServerTask(ReceiverClient parent) {
+         mParent = parent;
+      }
+      @Override
+      protected String doInBackground(String... params) {
+         //FIXME - pass in 'close' flag, somehow
+         Log.v("TJSAsync","Sending query : " + params[0]);
+         int command = Integer.parseInt(params[0]);
+         return mParent.sendQueryCommand(command,false,false);
+      }
+
+      @Override
+      protected void onPostExecute(String result) {
+         // TODO Auto-generated method stub
+         Log.v("TJSAsync","Got result: '" + result + "'...");
+         mParent.postQueryResults(result);
+         super.onPostExecute(result);
+      }
+   }
+   public interface CommandHandler {
+      public void onMessageSent(String message);
+      public void onMessageReceived(String message, String response);
+      public void onInputChange(int sourceVal);
+      public void onPowerChange(boolean powered_on);
+      public void onMuteChange(boolean muted);
+      public void onConnectionChange(boolean isConnected);
+   }
 }

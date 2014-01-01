@@ -10,35 +10,58 @@
    android:textIsSelectable="true"
    tools:context=".ReceiverDetailFragment" >
 
-    <Button
-       android:id="@+id/powerOnButton"
+    <ScrollView
+       android:id="@+id/scrollView1"
        android:layout_width="match_parent"
-       android:layout_height="wrap_content"
-       android:text="Power On" />
+       android:layout_height="wrap_content" >
 
-    <Button
-       android:id="@+id/powerOffButton"
-       android:layout_width="match_parent"
-       android:layout_height="wrap_content"
-       android:text="Power Off" />
+       <LinearLayout
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:id="@+id/buttons"
+          android:orientation="vertical" >
 
-    <Button
-       android:id="@+id/inputAuxButton"
-       android:layout_width="match_parent"
-       android:layout_height="wrap_content"
-       android:text="Aux Input" />
+           <LinearLayout
+              android:layout_width="match_parent"
+              android:layout_height="wrap_content" >
 
-    <Button
-       android:id="@+id/inputBdButton"
-       android:layout_width="match_parent"
-       android:layout_height="wrap_content"
-       android:text="BD Input" />
+               <TextView
+                  android:id="@+id/SourceLabel"
+                  android:layout_width="match_parent"
+                  android:layout_height="match_parent"
+                  android:layout_weight="1"
+                  android:gravity="right"
+                  android:textSize="20sp"
+                  android:text="Source" />
 
-    <Button
-       android:id="@+id/connectButton"
-       android:layout_width="match_parent"
-       android:layout_height="wrap_content"
-       android:text="Connect/Disconnect" />
+               <Spinner
+                  android:id="@+id/inputSelector"
+                  android:layout_width="match_parent"
+                  android:layout_height="match_parent"
+                  android:layout_weight="1"
+                  android:entries="@array/input_strings" />
+
+           </LinearLayout>
+
+          <!-- <Button
+             android:id="@+id/powerOnButton"
+             android:layout_width="match_parent"
+             android:layout_height="wrap_content"
+             android:text="Power On" />
+
+          <Button
+             android:id="@+id/powerOffButton"
+             android:layout_width="match_parent"
+             android:layout_height="wrap_content"
+             android:text="Power Off" />
+
+          <Button
+             android:id="@+id/connectButton"
+             android:layout_width="match_parent"
+             android:layout_height="wrap_content"
+             android:text="Connect/Disconnect" /> -->
+       </LinearLayout>
+    </ScrollView>
     
 </LinearLayout>
 
