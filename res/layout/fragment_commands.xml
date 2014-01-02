@@ -13,11 +13,12 @@
     <ScrollView
        android:id="@+id/scrollView1"
        android:layout_width="match_parent"
-       android:layout_height="wrap_content" >
+       android:layout_height="0dp"
+       android:layout_weight="1" >
 
        <LinearLayout
           android:layout_width="match_parent"
-          android:layout_height="wrap_content"
+          android:layout_height="match_parent"
           android:id="@+id/buttons"
           android:orientation="vertical" >
 
@@ -42,26 +43,33 @@
                   android:entries="@array/input_strings" />
 
            </LinearLayout>
-
-          <!-- <Button
-             android:id="@+id/powerOnButton"
-             android:layout_width="match_parent"
-             android:layout_height="wrap_content"
-             android:text="Power On" />
-
-          <Button
-             android:id="@+id/powerOffButton"
-             android:layout_width="match_parent"
-             android:layout_height="wrap_content"
-             android:text="Power Off" />
-
-          <Button
-             android:id="@+id/connectButton"
-             android:layout_width="match_parent"
-             android:layout_height="wrap_content"
-             android:text="Connect/Disconnect" /> -->
        </LinearLayout>
     </ScrollView>
+
+    <LinearLayout
+       android:layout_width="match_parent"
+       android:layout_height="wrap_content"
+       android:layout_marginLeft="8dp"
+       android:layout_marginRight="8dp"
+       android:layout_marginTop="5dp"
+       android:background="#888" >
+
+        <ToggleButton
+           android:id="@+id/muteToggleButton"
+           android:layout_width="85dp"
+           android:layout_height="wrap_content"
+           android:text="ToggleButton"
+           android:textOff="Unmuted"
+           android:textOn="Muted" />
+
+        <SeekBar
+           android:id="@+id/volumeInputBar"
+           android:layout_width="0dp"
+           android:layout_height="wrap_content"
+           android:layout_gravity="center_vertical"
+           android:layout_weight="1" />
+
+    </LinearLayout>
     
 </LinearLayout>
 

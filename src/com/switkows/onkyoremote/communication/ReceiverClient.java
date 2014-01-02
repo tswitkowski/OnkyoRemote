@@ -40,6 +40,14 @@ public class ReceiverClient extends Eiscp {
                Log.v("TJS","Querying source status..");
                query = new QueryServerTask(ReceiverClient.this);
                query.execute(String.valueOf(SOURCE_QUERY));
+               //FIXME - unify into one thread?
+               Log.v("TJS","Querying Volume Level..");
+               query = new QueryServerTask(ReceiverClient.this);
+               query.execute(String.valueOf(VOLUME_QUERY));
+               //FIXME - unify into one thread?
+               Log.v("TJS","Querying Mute status..");
+               query = new QueryServerTask(ReceiverClient.this);
+               query.execute(String.valueOf(MUTE_QUERY));
 //               query.execute(String.valueOf(VOLUME_QUERY));
             }
             return null;
@@ -84,6 +92,10 @@ public class ReceiverClient extends Eiscp {
       return null;
    }
    
+   /***
+    * Runs on GUI thread. Gives feedback to GUI and stores state to our object
+    * @param queryResult - message received from server (AV Receiver)
+    */
    public void postQueryResults(String queryResult) {
       Log.d("TJS","Query Result : '"+queryResult+"'...");
 //      String[] resultParnts = queryResult.split("/\n");
@@ -91,19 +103,29 @@ public class ReceiverClient extends Eiscp {
       if(mParent instanceof CommandHandler ) {
          CommandHandler parent = (CommandHandler)mParent;
          if(queryResult.contains("PWR")) {
+            //Power state decode
             String resultStr = queryResult.substring(3, 5);
             int value = Integer.parseInt(resultStr);
             Log.v("TJS","Power query result = '"+value+"'");
             parent.onPowerChange(value == 1);
             setPoweredOn(value==1);
-         } else if(queryResult.contains("VOL")) {
+            connectionStateChanged();
+         } else if(queryResult.contains("MVL")) {
+            //Volume level decode
+            String resultStr = queryResult.substring(3, 5);
+            float value = (float)Integer.parseInt(resultStr,16);
+            Log.v("TJS","Volume query result = '"+value+"'");
+            setVolume(value);
+            parent.onVolumeChange(value);
          } else if(queryResult.contains("AMT")) {
+            //Muted status decode
             String resultStr = queryResult.substring(3, 5);
             int value = Integer.parseInt(resultStr);
             Log.v("TJS","Muted query result = '"+value+"'");
             parent.onMuteChange(value == 1);
             setMuted(value==1);
          } else if(queryResult.contains("SLI")) {
+            //Source status decode
             String resultStr = queryResult.substring(0, 5);
 //            int value = Integer.parseInt(resultStr);
 //            Log.v("TJS","Input query result = '"+value+"'");
@@ -181,6 +203,11 @@ public class ReceiverClient extends Eiscp {
       public void onInputChange(int sourceVal);
       public void onPowerChange(boolean powered_on);
       public void onMuteChange(boolean muted);
+      /***
+       * Interface for communicating volume state changes to GUI (call on GUI thread only!)
+       * @param volume - decimal volume value (0 = no sound, 100.0 = max sound)
+       */
+      public void onVolumeChange(float volume);
       public void onConnectionChange(boolean isConnected);
    }
 }

@@ -36,11 +36,8 @@ import android.annotation.SuppressLint;
 import java.io.*;
 import java.net.*;
 import java.util.HashMap;
-//import java.util.TreeSet;
 import java.util.Iterator;
-import java.util.Locale;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.Vector;
 
 /**
@@ -72,12 +69,6 @@ public class Eiscp
   /**  The users pwd ditrectory.  */
   public static String USERDIR = System.getProperty("user.dir");
 
-  /**  A holder This classes name (used when logging).  */
-  private static String CLASSNAME = "ca.bc.webarts.tools.eiscp.Eiscp";
-
-  /**  Class flag signifying if the initUtil method has been called  */
-//  private static boolean classInit = false;
-
   /** default receiver IP Address. **/
   private static final String DEFAULT_EISCP_IP = "16.1.1.200";
   /** Instantiated class IP for the receiver to communicate with. **/
@@ -104,15 +95,13 @@ public class Eiscp
   public static HashMap<String, Integer> commandNameMap_ = null;
 
   /** Var to hold the volume level to or from a message. **/
-  private static int volume_ = 32;
+  private float volume_ = 32;
   
   /** Var to hold the power status **/
   private boolean powered_on_ = false;
 
   /** Var to hold mute status **/
   private boolean muted_     = false;
-
-  private static StringBuffer helpMsg_ = new StringBuffer(SYSTEM_LINE_SEPERATOR);
 
   /** Simple class Constructor (using deafult IP and port) that gets all the class command constants set-up along with their command lookup maps (commandNameMap_ and commandMap_) . **/
   public Eiscp()
@@ -219,51 +208,6 @@ public class Eiscp
     }
     return connected_;
   }
-
-
-  /**
-   * Tests the Connection to the receiver by opening a socket connection through the DEFaULT IP and DEFAULT eISCP port.
-   **/
-   public boolean testConnection() { return testConnection(DEFAULT_EISCP_IP,DEFAULT_EISCP_PORT);}
-
-
-  /**
-   * test the connection to the receiver by opening a socket connection through the eISCP port AND THEN CLOSES it if it was not already open.
-   * @return true if already connected or can connect, and false if can't connect
-   **/
-  public boolean testConnection(String ip, int eiscpPort)
-  {
-    boolean retVal = false;
-    if (ip==null || ip.equals("")) ip=DEFAULT_EISCP_IP;
-    if (eiscpPort==0 ) eiscpPort=DEFAULT_EISCP_PORT;
-
-    if (connected_)
-    {
-      // test existing connection
-      if (eiscpSocket_.isConnected()) retVal = true;
-    }
-    else
-    {
-      // test a new connection
-      try
-      {
-        //1. creating a socket to connect to the server
-        eiscpSocket_ = new Socket(ip, eiscpPort);
-        if (eiscpSocket_!=null) eiscpSocket_.close();
-        retVal = true;
-      }
-      catch(UnknownHostException unknownHost)
-      {
-        errorMessage("You are trying to connect to an unknown host!");
-      }
-      catch(IOException ioException)
-      {
-        errorMessage("Can't Connect: "+ioException.getMessage());
-      }
-    }
-    return retVal;
-  }
-
 
   /**
    * Closes the socket connection.
@@ -433,15 +377,16 @@ public class Eiscp
     // the following are all in HEX representing one char
 
     // 4 char Big Endian Header
-    sb.append((char)Integer.parseInt("00", 16));
-    sb.append((char)Integer.parseInt("00", 16));
-    sb.append((char)Integer.parseInt("00", 16));
+    char padding = (char)Integer.parseInt("00", 16); 
+    sb.append(padding);
+    sb.append(padding);
+    sb.append(padding);
     sb.append((char)Integer.parseInt("10", 16));
 
     // 4 char  Big Endian data size
-    sb.append((char)Integer.parseInt("00", 16));
-    sb.append((char)Integer.parseInt("00", 16));
-    sb.append((char)Integer.parseInt("00", 16));
+    sb.append(padding);
+    sb.append(padding);
+    sb.append(padding);
     // the official ISCP docs say this is supposed to be just the data size  (eiscpDataSize)
     // ** BUT **
     // It only works if you send the size of the entire Message size (eiscpMsgSize)
@@ -451,9 +396,9 @@ public class Eiscp
     sb.append((char)Integer.parseInt("01", 16));
 
     // 3 chars reserved = "00"+"00"+"00";
-    sb.append((char)Integer.parseInt("00", 16));
-    sb.append((char)Integer.parseInt("00", 16));
-    sb.append((char)Integer.parseInt("00", 16));
+    sb.append(padding);
+    sb.append(padding);
+    sb.append(padding);
 
     //  eISCP data
     // Start Character
@@ -513,6 +458,10 @@ public class Eiscp
            setPoweredOn(true);
         else if(command == POWER_OFF)
            setPoweredOn(false);
+        else if(command == UNMUTE)
+           setMuted(false);
+        else if(command == MUTE)
+           setMuted(true);
       }
       catch(IOException ioException)
       {
@@ -572,8 +521,12 @@ public class Eiscp
     {
       currResponse = (String) rv.elementAt(i);
       /* Send ALL responses OR just the one related to the commad sent??? */
-      if (returnAll || currResponse.startsWith(getCommandStr(command).substring(0,3)))
+      if (returnAll || currResponse.startsWith(getCommandStr(command).substring(0,3))) {
         retVal+= currResponse+"\n";
+        debugMessage("Accepting  message: '"+currResponse+"'");
+      }
+      else
+         debugMessage("Filtering message: '"+currResponse+"'");
     }
     
     if (closeSocket) closeSocket();
@@ -720,7 +673,7 @@ public class Eiscp
 
 
   /** This method creates the set volume command based on the passed value. **/
-  public static  String getVolumeCmdStr(){return "MVL"+Integer.toHexString(volume_);}
+  public String getVolumeCmdStr(){return "MVL"+Integer.toHexString((int)volume_);}
 
 
   /** This method takes the  3 character response from the USB Play status query (NETUSB_PLAY_STATUS_QUERY) and creates a human readable String. 
@@ -786,149 +739,10 @@ public class Eiscp
     return retVal;
   }
 
-
-  /**
-   *  A method to simply abstract the Try/Catch required to put the current
-   *  thread to sleep for the specified time in ms.
-   *
-   * @param  waitTime  the sleep time in milli seconds (ms).
-   * @return           boolean value specifying if the sleep completed (true) or
-   *      was interupted (false).
-   */
-  public boolean sleep(long waitTime)
-  {
-    boolean retVal = true;
-    /*
-     *  BLOCK for the spec'd time
-     */
-    try
-    {
-      Thread.sleep(waitTime);
-    }
-    catch (InterruptedException iex)
-    {
-      retVal = false;
-    }
-    return retVal;
-  }
-
-
-  /** gets the help as a String. 
-   * @return the helpMsg in String form
-   **/
-  private static String getHelpMsgStr() {return getHelpMsg().toString();}
-
-
-  /** initializes and gets the helpMsg_
-  class var. 
-   * @return the class var helpMsg_
-   **/
-  private static StringBuffer getHelpMsg()
-  {
-    helpMsg_ = new StringBuffer(SYSTEM_LINE_SEPERATOR);
-    helpMsg_.append("---  WebARTS Eiscp Class  -----------------------------------------------------");
-    helpMsg_.append(SYSTEM_LINE_SEPERATOR);
-    helpMsg_.append("---  $Revision: 590 $ $Date: 2012-12-09 15:19:16 -0800 (Sun, 09 Dec 2012) $ ---");
-    helpMsg_.append(SYSTEM_LINE_SEPERATOR);
-    helpMsg_.append("-------------------------------------------------------------------------------");
-    helpMsg_.append(SYSTEM_LINE_SEPERATOR);
-    helpMsg_.append("WebARTS Eiscp Class");
-    helpMsg_.append(SYSTEM_LINE_SEPERATOR);
-    helpMsg_.append("SYNTAX:");
-    helpMsg_.append(SYSTEM_LINE_SEPERATOR);
-    helpMsg_.append("   java ");
-    helpMsg_.append(CLASSNAME);
-    helpMsg_.append(" command [commandArgs]");
-    helpMsg_.append(SYSTEM_LINE_SEPERATOR);
-    helpMsg_.append(SYSTEM_LINE_SEPERATOR);
-    helpMsg_.append("Available Methods:");
-    /* now add all the commands available */
-    TreeSet <String> ts = new TreeSet<String>(commandNameMap_.keySet());
-    Iterator<String> it =ts.tailSet("").iterator();
-    while( it.hasNext())
-    {
-      helpMsg_.append(SYSTEM_LINE_SEPERATOR);
-      helpMsg_.append("-->   "+it.next());
-    }
-    helpMsg_.append(SYSTEM_LINE_SEPERATOR);
-    helpMsg_.append("---------------------------------------------------------");
-    helpMsg_.append("----------------------");
-    helpMsg_.append(SYSTEM_LINE_SEPERATOR);
-
-    return helpMsg_;
-  }
-
-
-  /**  
-   * Class main commandLine entry method.
-   **/
-  public void main(String [] args)
-  {
-//    final String methodName = CLASSNAME + ": main()";
-    Eiscp instance = new Eiscp(DEFAULT_EISCP_IP, DEFAULT_EISCP_PORT);
-
-    /* Simple way af parsing the args */
-    if (args ==null || args.length<1)
-      debugMessage(getHelpMsgStr());
-    else
-    {
-      if (args[0].equals("test"))
-      {
-        debugMessage("Testing Eiscp");
-        instance.sendQueryCommand(VOLUME_QUERY);
-        instance.sendCommand(MUTE);
-        instance.sleep(750);
-        instance.sendCommand(UNMUTE);
-      }
-      else
-      {
-        // Parse the command
-        int command = -1;
-        String commandStr = "";
-        // TODO: Set up a loop to handle multiple commands/args in one run with one socket connection
-        command =instance.getCommand(args[0].toUpperCase(Locale.ENGLISH));  //returns -1 if not found
-        commandStr=instance.getCommandStr(command);
-        
-        /* Special case VOLUME_SET command needs to parse a parameter. */
-        if ( command == VOLUME_SET ) instance.setVolume(Integer.parseInt(args[1]));
-        debugMessage("command: "+commandStr);
-
-        String queryResponse = "";
-        if (command!=-1)
-          
-          /* It is a query command so send AND parse response */
-          if(args[0].endsWith("QUERY") )   
-          {
-            //send the command and get the response
-            queryResponse = instance.sendQueryCommand(command, true, false);
-            System.out.print("Responses: \n" +queryResponse);
-            if (queryResponse!=null && !queryResponse.equals(""))
-            {
-              debugMessage(instance.getCommandName(queryResponse.trim()));
-              if (command==NETUSB_PLAY_STATUS_QUERY)
-              {
-                debugMessage(instance.decipherUsbPlayStatusResponse(queryResponse));
-              }
-            }
-            else
-              debugMessage("\n"+ args[0]+"("+commandStr +") response: EMPTY");
-          }
-          
-          /* It is a basic change setting command (with no response) */
-          else 
-          {
-            instance.sendCommand(command); //send the command
-          }
-      }
-      instance.closeSocket();
-    }
-  } // main
-
-
   /** get the class volume_.
    * @return the volume_
    **/
-  public int getVolume()
+  public float getVolume()
   {
     return volume_;
   }
@@ -937,7 +751,7 @@ public class Eiscp
   /** sets the class volume_.
    * @param volume the value to set the class volume_
    **/
-  public void setVolume(int volume)
+  public void setVolume(float volume)
   {
     volume_ = volume;
   }

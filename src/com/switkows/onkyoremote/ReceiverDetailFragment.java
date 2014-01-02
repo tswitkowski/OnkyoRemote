@@ -15,9 +15,14 @@ import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemSelectedListener;
 import android.widget.Button;
+import android.widget.CompoundButton;
+import android.widget.CompoundButton.OnCheckedChangeListener;
 import android.widget.LinearLayout;
+import android.widget.SeekBar;
+import android.widget.SeekBar.OnSeekBarChangeListener;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.ToggleButton;
 
 import com.switkows.onkyoremote.communication.Eiscp;
 import com.switkows.onkyoremote.communication.ReceiverClient;
@@ -101,12 +106,13 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
       View rootView;
       if(isCommandFragment) {
          rootView = inflater.inflate(R.layout.fragment_commands, container, false);
+
          //start connection
          eISCPInterface = new ReceiverClient(this,ReceiverClient.DEFAULT_IP_ADDR,ReceiverClient.DEFAULT_TCP_PORT);//FIXME - make IP address & port number configurable
          eISCPInterface.initiateConnection();
+
          //connect eventListeners to buttons
          View view;
-         //FIXME - this fires once on initial load, which causes the receiver to turn on if it is currently off
          view = rootView.findViewById(R.id.inputSelector);
          view.setEnabled(false); //disable by default. once the connection to the server has been established and the value queried, the field will be enabled
          ((Spinner)view).setOnItemSelectedListener(new OnItemSelectedListener() {
@@ -123,11 +129,19 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
             }
          });
 
+         //attach listener to seekbar (volume slider) to update master volume
+         view = rootView.findViewById(R.id.volumeInputBar);
+         ((SeekBar)view).setOnSeekBarChangeListener(new VolumeListener(this));
+
+         //attach listener to mute button
+         view = rootView.findViewById(R.id.muteToggleButton);
+         ((ToggleButton)view).setOnCheckedChangeListener(new MuteListener(this));
+
          //dynamically add buttons (saves copy/paste in layout file as well as attaching event handlers)
          LinearLayout layout = (LinearLayout)rootView.findViewById(R.id.buttons);
-         String[] labels = {"Power On","Power Off","Volume Up", "Volume Down", "Mute/Unmute", "Up", "Down",
+         String[] labels = {"Power On","Power Off","Volume Up", "Volume Down", "Up", "Down",
                             "Left", "Right", "Enter", "Exit", "Menu"};
-         final int[] commands = {Eiscp.POWER_ON, Eiscp.POWER_OFF, Eiscp.VOLUME_UP, Eiscp.VOLUME_DOWN, Eiscp.MUTE_TOGGLE, Eiscp.DIRECTION_UP, Eiscp.DIRECTION_DOWN,
+         final int[] commands = {Eiscp.POWER_ON, Eiscp.POWER_OFF, Eiscp.VOLUME_UP, Eiscp.VOLUME_DOWN, Eiscp.DIRECTION_UP, Eiscp.DIRECTION_DOWN,
                                  Eiscp.DIRECTION_LEFT, Eiscp.DIRECTION_RIGHT, Eiscp.BUTTON_ENTER, Eiscp.BUTTON_EXIT, Eiscp.BUTTON_MENU};
          for(int i=0 ; i < labels.length ; i++) {
             Button button = new Button(container.getContext());
@@ -144,7 +158,7 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
       }
       else {
          rootView = inflater.inflate(R.layout.fragment_receiver_detail, container, false);
-   
+
          // Show the dummy content as text in a TextView.
          if(mItem != null) {
             ((TextView)rootView.findViewById(R.id.receiver_detail)).setText(mItem.content);
@@ -156,14 +170,12 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
 
    @Override
    public void onMessageSent(String message) {
-      // TODO Auto-generated method stub
-      
+      // FIXME - add logging to other fragment?
    }
 
    @Override
    public void onMessageReceived(String message, String response) {
-      // TODO Auto-generated method stub
-      
+      // FIXME - add logging to other fragment?
    }
 
    @Override
@@ -176,9 +188,7 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
    }
 
    @Override
-   public void onPowerChange(boolean powered_on) {
-      // TODO Auto-generated method stub
-   }
+   public void onPowerChange(boolean powered_on) {}
 
    public void toggleConnection() {
       if(eISCPInterface != null) {
@@ -211,9 +221,69 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
       View view = this.getView().findViewById(R.id.inputSelector);
       view.setEnabled(isConnected);
    }
+
    @Override
    public void onMuteChange(boolean muted) {
-      // TODO Auto-generated method stub
-      
+      ToggleButton view = (ToggleButton)this.getView().findViewById(R.id.muteToggleButton);
+      view.setChecked(muted);
+//      view.setImageResource(muted ? android.R.drawable.ic_lock_silent_mode : android.R.drawable.ic_lock_silent_mode_off);
+   }
+
+   @Override
+   public void onVolumeChange(float volume) {
+      SeekBar view = (SeekBar)this.getView().findViewById(R.id.volumeInputBar);
+      view.setProgress((int)volume);
+   }
+   
+   public void setVolume(float volume) {
+      //set local state
+      eISCPInterface.setVolume(volume);
+      //now send command to server
+      eISCPInterface.sendCommand(Eiscp.VOLUME_SET);
+   }
+
+   public void setMuted(boolean muted) {
+      //set local state
+      eISCPInterface.setMuted(muted);
+      //now send command to server
+      if(muted)
+         eISCPInterface.sendCommand(Eiscp.MUTE);
+      else
+         eISCPInterface.sendCommand(Eiscp.UNMUTE);
+   }
+
+   private class MuteListener implements OnCheckedChangeListener {
+      private final ReceiverDetailFragment mParent;
+      public MuteListener(ReceiverDetailFragment parent) {
+         mParent = parent;
+      }
+      @Override
+      public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+         mParent.setMuted(isChecked);
+      }
+   }
+   private class VolumeListener implements OnSeekBarChangeListener {
+      private final ReceiverDetailFragment mParent;
+      public VolumeListener(ReceiverDetailFragment parent) {
+         mParent = parent;
+      }
+      @Override
+      public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+         // TODO Auto-generated method stub
+         if(fromUser) {
+            mParent.setVolume((float)seekBar.getProgress());
+         }
+         
+      }
+      @Override
+      public void onStartTrackingTouch(SeekBar seekBar) {
+         // TODO Auto-generated method stub
+         
+      }
+      @Override
+      public void onStopTrackingTouch(SeekBar seekBar) {
+         // TODO Auto-generated method stub
+         
+      }
    }
 }
