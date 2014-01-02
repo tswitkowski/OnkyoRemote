@@ -35,19 +35,19 @@ public class ReceiverClient extends Eiscp {
                QueryServerTask query;
                Log.v("TJS","Querying power status..");
                query = new QueryServerTask(ReceiverClient.this);
-               query.execute(String.valueOf(POWER_QUERY));
+               query.execute(String.valueOf(IscpCommands.POWER_QUERY));
                //FIXME - unify into one thread?
                Log.v("TJS","Querying source status..");
                query = new QueryServerTask(ReceiverClient.this);
-               query.execute(String.valueOf(SOURCE_QUERY));
+               query.execute(String.valueOf(IscpCommands.SOURCE_QUERY));
                //FIXME - unify into one thread?
                Log.v("TJS","Querying Volume Level..");
                query = new QueryServerTask(ReceiverClient.this);
-               query.execute(String.valueOf(VOLUME_QUERY));
+               query.execute(String.valueOf(IscpCommands.VOLUME_QUERY));
                //FIXME - unify into one thread?
                Log.v("TJS","Querying Mute status..");
                query = new QueryServerTask(ReceiverClient.this);
-               query.execute(String.valueOf(MUTE_QUERY));
+               query.execute(String.valueOf(IscpCommands.MUTE_QUERY));
 //               query.execute(String.valueOf(VOLUME_QUERY));
             }
             return null;
@@ -129,8 +129,8 @@ public class ReceiverClient extends Eiscp {
             String resultStr = queryResult.substring(0, 5);
 //            int value = Integer.parseInt(resultStr);
 //            Log.v("TJS","Input query result = '"+value+"'");
-            if(commandMapInverse_.containsKey(resultStr)) {
-               parent.onInputChange(commandMapInverse_.get(resultStr));
+            if(IscpCommands.commandMapInverse_.containsKey(resultStr)) {
+               parent.onInputChange(IscpCommands.commandMapInverse_.get(resultStr));
             }
          }
       }
