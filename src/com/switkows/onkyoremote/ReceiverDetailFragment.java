@@ -1,9 +1,10 @@
 package com.switkows.onkyoremote;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
-import android.support.v4.app.FragmentActivity;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -22,9 +23,11 @@ import android.widget.SeekBar;
 import android.widget.SeekBar.OnSeekBarChangeListener;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.Toast;
 import android.widget.ToggleButton;
 
-import com.switkows.onkyoremote.communication.Eiscp;
+import com.switkows.onkyoremote.communication.IscpCommands;
+import com.switkows.onkyoremote.communication.IscpDeviceDiscover;
 import com.switkows.onkyoremote.communication.ReceiverClient;
 import com.switkows.onkyoremote.communication.ReceiverClient.CommandHandler;
 import com.switkows.onkyoremote.dummy.DummyContent;
@@ -41,6 +44,8 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
     * represents.
     */
    public static final String     ARG_ITEM_ID = "item_id";
+   public static final String     ARG_IP_ADDR = "ip_addr";
+   public static final String     ARG_TCP_PORT= "tcp_port";
    //FIXME - split to different fragments (one for commands, one for console output
    //        but since this is a demo (i.e. non-final implementation), this is okay, maybe forever
    private boolean isCommandFragment;
@@ -51,17 +56,12 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
     */
    private DummyContent.DummyItem mItem;
    
-   private FragmentActivity mParent;//pointer to parent (for callbacks, etc)
-
    /**
     * Mandatory empty constructor for the fragment manager to instantiate the
     * fragment (e.g. upon screen orientation changes).
     */
-   
+
    public ReceiverDetailFragment() {}
-   public ReceiverDetailFragment(FragmentActivity parent) {
-      mParent = parent;
-   }
 
    @Override
    public void onCreate(Bundle savedInstanceState) {
@@ -78,8 +78,27 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
          else
             isCommandFragment = false;
       }
-      if(isCommandFragment)
+      if(isCommandFragment) {
+         setRetainInstance(true);
          setHasOptionsMenu(true);
+
+         //start connection
+         //FIXME - pull data for connection
+         String ip_addr = ReceiverClient.DEFAULT_IP_ADDR;
+         int tcp_port = ReceiverClient.DEFAULT_TCP_PORT;
+         if(getArguments().containsKey(ARG_IP_ADDR)) {
+            ip_addr = getArguments().getString(ARG_IP_ADDR);
+//            Log.v("TJSDEBUG","Setting port number from parent : "+ip_addr);
+         }
+         if(getArguments().containsKey(ARG_TCP_PORT)) {
+            tcp_port = getArguments().getInt(ARG_TCP_PORT);
+//            Log.v("TJSDEBUG","Setting port number from parent : "+tcp_port);
+         }
+         if(eISCPInterface == null) {
+            eISCPInterface = new ReceiverClient(this,ip_addr,tcp_port);
+            eISCPInterface.initiateConnection();
+         }
+      }
    }
 
    private Menu mMenu;//save pointer, so we can overwrite icons/text later
@@ -89,6 +108,16 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
       inflater.inflate(R.menu.main_menu, menu);
       mMenu = menu;
       super.onCreateOptionsMenu(menu, inflater);
+//      Log.v("TJSDebug","called onCreateOptionsMenu");
+      //restore state (i don't like doing it here, but i need to do it fairly late
+      if(eISCPInterface != null) {
+//         Log.v("TJSDEBUG", "onAttach called. setting up GUI state");
+         onPowerChange(eISCPInterface.getPoweredOn());
+         onConnectionChange(eISCPInterface.isConnected());
+         onMuteChange(eISCPInterface.getMuted());
+         onVolumeChange(eISCPInterface.getVolume());
+      }
+
    }
 
    @Override
@@ -97,6 +126,20 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
          case R.id.connectActionButton:
             toggleConnection();
             return true;
+         case R.id.discoverButton:
+            IscpDeviceDiscover columbus = new IscpDeviceDiscover();
+            new AsyncTask<IscpDeviceDiscover,Void,IscpDeviceDiscover>() {
+               @Override
+               protected IscpDeviceDiscover doInBackground(IscpDeviceDiscover... params) {
+                  params[0].discover(null,null);
+                  return params[0];
+               };
+               @Override
+               protected void onPostExecute(IscpDeviceDiscover result) {
+                  Toast.makeText(getActivity(), result.printAllReceivers(), Toast.LENGTH_LONG).show();
+               }
+            }.execute(columbus);
+            return true;
       }
       return super.onOptionsItemSelected(item);
    }
@@ -104,12 +147,9 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
    @Override
    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
       View rootView;
+//      Log.v("TJSDEBUG","called onCreateView");
       if(isCommandFragment) {
          rootView = inflater.inflate(R.layout.fragment_commands, container, false);
-
-         //start connection
-         eISCPInterface = new ReceiverClient(this,ReceiverClient.DEFAULT_IP_ADDR,ReceiverClient.DEFAULT_TCP_PORT);//FIXME - make IP address & port number configurable
-         eISCPInterface.initiateConnection();
 
          //connect eventListeners to buttons
          View view;
@@ -122,7 +162,7 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
                //       I will later change to set the value of the Array to the current input
                //       value, on startup, so we don't turn on device upon app powerup)
                if(eISCPInterface.getPoweredOn())
-                  eISCPInterface.sendCommand(Eiscp.SOURCE_DVR + arg2);//FIXME - apply proper addition. This seems to work, but it's not very robust
+                  eISCPInterface.sendCommand(IscpCommands.SOURCE_DVR + arg2);//FIXME - apply proper addition. This seems to work, but it's not very robust
             }
             @Override
             public void onNothingSelected(AdapterView<?> arg0) {
@@ -141,8 +181,8 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
          LinearLayout layout = (LinearLayout)rootView.findViewById(R.id.buttons);
          String[] labels = {"Power On","Power Off","Volume Up", "Volume Down", "Up", "Down",
                             "Left", "Right", "Enter", "Exit", "Menu"};
-         final int[] commands = {Eiscp.POWER_ON, Eiscp.POWER_OFF, Eiscp.VOLUME_UP, Eiscp.VOLUME_DOWN, Eiscp.DIRECTION_UP, Eiscp.DIRECTION_DOWN,
-                                 Eiscp.DIRECTION_LEFT, Eiscp.DIRECTION_RIGHT, Eiscp.BUTTON_ENTER, Eiscp.BUTTON_EXIT, Eiscp.BUTTON_MENU};
+         final int[] commands = {IscpCommands.POWER_ON, IscpCommands.POWER_OFF, IscpCommands.VOLUME_UP, IscpCommands.VOLUME_DOWN, IscpCommands.DIRECTION_UP, IscpCommands.DIRECTION_DOWN,
+                                 IscpCommands.DIRECTION_LEFT, IscpCommands.DIRECTION_RIGHT, IscpCommands.BUTTON_ENTER, IscpCommands.BUTTON_EXIT, IscpCommands.BUTTON_MENU};
          for(int i=0 ; i < labels.length ; i++) {
             Button button = new Button(container.getContext());
             button.setText(labels[i]);
@@ -180,11 +220,11 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
 
    @Override
    public void onInputChange(int sourceVal) {
-      // TODO Auto-generated method stub
-      Spinner view = (Spinner)this.getView().findViewById(R.id.inputSelector);
-//      view.setEnabled(true);//FIXME - only set to TRUE if it was previously false?
-      Log.v("TJS","Received "+sourceVal);
-      view.setSelection(sourceVal-Eiscp.SOURCE_DVR);//FIXME - apply proper addition. This seems to work, but it's not very robust
+      if(getView()!=null) {
+         Spinner view = (Spinner)this.getView().findViewById(R.id.inputSelector);
+         Log.v("TJS","Received "+sourceVal);
+         view.setSelection(sourceVal-IscpCommands.SOURCE_DVR);//FIXME - apply proper addition. This seems to work, but it's not very robust
+      }
    }
 
    @Override
@@ -204,42 +244,48 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
 
    @Override
    public void onConnectionChange(boolean isConnected) {
-      if(mParent != null && mParent instanceof CommandHandler)
-         ((CommandHandler)mParent).onConnectionChange(isConnected);
       //overwrite menu icon
       //FIXME - for some reason, on a one-pane configuration, this is triggered before mMenu is defined...
       if(mMenu != null) {
          MenuItem item = mMenu.findItem(R.id.connectActionButton);
-         if(isConnected) {
-            item.setIcon(android.R.drawable.presence_online);
-            item.setTitle("Disconnect from Server");
-         } else {
-            item.setIcon(android.R.drawable.stat_notify_sync_noanim);
-            item.setTitle("Connect to Server");
+//         Log.v("TJSDebug","Called onConnectionChange with menu = "+mMenu+", item = "+item+", connected:"+isConnected);
+         if(item != null) {//FIXME - required to fix null pointer on context change
+            if(isConnected) {
+               item.setIcon(android.R.drawable.presence_online);
+               item.setTitle("Disconnect from Server");
+            } else {
+               item.setIcon(android.R.drawable.stat_notify_sync_noanim);
+               item.setTitle("Connect to Server");
+            }
          }
       }
-      View view = this.getView().findViewById(R.id.inputSelector);
-      view.setEnabled(isConnected);
+      if(getView()!=null) {
+         View view = this.getView().findViewById(R.id.inputSelector);
+         view.setEnabled(isConnected);
+      }
    }
 
    @Override
    public void onMuteChange(boolean muted) {
-      ToggleButton view = (ToggleButton)this.getView().findViewById(R.id.muteToggleButton);
-      view.setChecked(muted);
-//      view.setImageResource(muted ? android.R.drawable.ic_lock_silent_mode : android.R.drawable.ic_lock_silent_mode_off);
+      if(getView()!=null) {
+         ToggleButton view = (ToggleButton)this.getView().findViewById(R.id.muteToggleButton);
+         view.setChecked(muted);
+      }
    }
 
    @Override
    public void onVolumeChange(float volume) {
-      SeekBar view = (SeekBar)this.getView().findViewById(R.id.volumeInputBar);
-      view.setProgress((int)volume);
+      if(getView()!=null) {
+         SeekBar view = (SeekBar)this.getView().findViewById(R.id.volumeInputBar);
+         view.setProgress((int)volume);
+      }
    }
    
    public void setVolume(float volume) {
       //set local state
       eISCPInterface.setVolume(volume);
       //now send command to server
-      eISCPInterface.sendCommand(Eiscp.VOLUME_SET);
+      eISCPInterface.sendCommand(IscpCommands.VOLUME_SET);
    }
 
    public void setMuted(boolean muted) {
@@ -247,9 +293,9 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
       eISCPInterface.setMuted(muted);
       //now send command to server
       if(muted)
-         eISCPInterface.sendCommand(Eiscp.MUTE);
+         eISCPInterface.sendCommand(IscpCommands.MUTE);
       else
-         eISCPInterface.sendCommand(Eiscp.UNMUTE);
+         eISCPInterface.sendCommand(IscpCommands.UNMUTE);
    }
 
    private class MuteListener implements OnCheckedChangeListener {

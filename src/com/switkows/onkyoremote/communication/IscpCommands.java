@@ -104,7 +104,7 @@ public class IscpCommands
 	 * @param commandStr the iscp command to get a commandName key
 	 * @return the commandNameMap_ key
 	**/
-	public String getCommandName(String commandStr)
+	public static String getCommandName(String commandStr)
 	{
 		String retVal = "";
 		int command = -1;
@@ -133,7 +133,7 @@ public class IscpCommands
 	 * @param commandName a string representation of command referencing the iscp command
 	 * @return the iscp command constant reference
 	 **/
-	public int getCommand(String commandName)
+	public static int getCommand(String commandName)
 	{
 		return  commandNameMap_.get(commandName);
 	}
@@ -143,7 +143,7 @@ public class IscpCommands
 	 * @param command the command referencing the iscp command constant
 	 * @return the iscp command string (example 'SLI10')
 	 **/
-	public String getCommandStr(int command)
+	public static String getCommandStr(int command)
 	{
 		return  commandMap_.get(command);
 	}
@@ -153,16 +153,16 @@ public class IscpCommands
 	 * @param commandName the commandName key referencing the iscp command str
 	 * @return the iscp command string (example 'SLI10')
 	 **/
-	public String getCommandStr(String commandName)
+	public static String getCommandStr(String commandName)
 	{
 		int command = -1;
-		if (commandNameMap_.containsKey(commandName));
+		if (commandNameMap_.containsKey(commandName))
 			command = commandNameMap_.get(commandName);
 		return  commandMap_.get(command);
 	}
 
   /** This method creates the set volume command based on the passed value. **/
-  public String getVolumeCmdStr(int volume){return "MVL"+Integer.toHexString(volume);}
+  public static String getVolumeCmdStr(int volume){return "MVL"+Integer.toHexString(volume);}
 
 
 	/** Initializes all the class constants (commandNameMap_ & commandMap_ ) that help with processing the commands.
@@ -172,6 +172,7 @@ public class IscpCommands
 	{
 		commandNameMap_ = new HashMap<String, Integer>(eCnt);
 		commandMap_ = new HashMap<Integer, String>(eCnt);
+		commandMapInverse_ = new HashMap<String, Integer>(eCnt);
 
 		commandNameMap_.put("POWER_OFF", POWER_OFF);
 		commandNameMap_.put("POWER_ON", POWER_ON);
@@ -289,6 +290,7 @@ public class IscpCommands
 		commandNameMap_.put("OSD_ENTER" , BUTTON_ENTER);
 		commandNameMap_.put("OSD_EXIT" , BUTTON_EXIT);
 		commandNameMap_.put("OSD_MENU" , BUTTON_MENU);
+		commandNameMap_.put("SERVER_QUERY" , SERVER_QUERY);
 
 		commandMap_.put(POWER_OFF, "PWR00");
 		commandMap_.put(POWER_ON , "PWR01");
@@ -402,6 +404,7 @@ public class IscpCommands
 		commandMap_.put(BUTTON_ENTER, "OSDENTER");
 		commandMap_.put(BUTTON_EXIT, "OSDEXIT");
 		commandMap_.put(BUTTON_MENU, "OSDMENU");
+		commandMap_.put(SERVER_QUERY, "ECNQSTN");
 		
         Set<Integer> keys = commandMap_.keySet();
         for(Iterator<Integer> iterator = keys.iterator(); iterator.hasNext();) {
@@ -618,5 +621,7 @@ public class IscpCommands
       public static final int BUTTON_ENTER   = eCnt++;
       public static final int BUTTON_EXIT    = eCnt++;
       public static final int BUTTON_MENU    = eCnt++;
+
+      public static final int SERVER_QUERY   = eCnt++;
 
 } // class

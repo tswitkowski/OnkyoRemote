@@ -4,6 +4,7 @@
        android:icon="@android:drawable/stat_notify_sync_noanim"
        android:showAsAction="always"
        android:title="Connect to Server"></item>
+    <item android:id="@+id/discoverButton" android:title="Discover" android:showAsAction="always|withText"></item>
    
 
 </menu>

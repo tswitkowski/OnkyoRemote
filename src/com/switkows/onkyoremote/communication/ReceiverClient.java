@@ -9,13 +9,17 @@ import android.util.Log;
 ***/
 //FIXME - can/should I build this into a content provider? I'm guessing not (since it complicates queries a bit)
 public class ReceiverClient extends Eiscp {
-   public static final String DEFAULT_IP_ADDR = "16.1.1.200";
+   public static final String DEFAULT_IP_ADDR = "10.1.1.45";
    public static final int DEFAULT_TCP_PORT   = Eiscp.DEFAULT_EISCP_PORT;
-   public final Fragment mParent;
+   public final CommandHandler mParent;
 
    public ReceiverClient(Fragment parent,String ip_addr, int port) {
       super(ip_addr,port);
-      mParent = parent;
+      try {
+         mParent = (CommandHandler)parent;
+      } catch(ClassCastException e) {
+         throw new ClassCastException(parent.toString()+" must implement CommandHandler interface");
+      }
    }
 
    /**
@@ -48,7 +52,6 @@ public class ReceiverClient extends Eiscp {
                Log.v("TJS","Querying Mute status..");
                query = new QueryServerTask(ReceiverClient.this);
                query.execute(String.valueOf(IscpCommands.MUTE_QUERY));
-//               query.execute(String.valueOf(VOLUME_QUERY));
             }
             return null;
          }
@@ -64,7 +67,7 @@ public class ReceiverClient extends Eiscp {
 
    public void connectionStateChanged() {
       Log.v("TJS","Calling connectionStateChanged : connected = "+isConnected());
-      if(mParent != null && mParent instanceof CommandHandler)
+      if(mParent != null)
          ((CommandHandler)mParent).onConnectionChange(isConnected());
    }
 
@@ -100,14 +103,13 @@ public class ReceiverClient extends Eiscp {
       Log.d("TJS","Query Result : '"+queryResult+"'...");
 //      String[] resultParnts = queryResult.split("/\n");
 //      if(queryResult.split(regularExpression))
-      if(mParent instanceof CommandHandler ) {
-         CommandHandler parent = (CommandHandler)mParent;
+      if(mParent != null ) {
          if(queryResult.contains("PWR")) {
             //Power state decode
             String resultStr = queryResult.substring(3, 5);
             int value = Integer.parseInt(resultStr);
             Log.v("TJS","Power query result = '"+value+"'");
-            parent.onPowerChange(value == 1);
+            mParent.onPowerChange(value == 1);
             setPoweredOn(value==1);
             connectionStateChanged();
          } else if(queryResult.contains("MVL")) {
@@ -116,13 +118,13 @@ public class ReceiverClient extends Eiscp {
             float value = (float)Integer.parseInt(resultStr,16);
             Log.v("TJS","Volume query result = '"+value+"'");
             setVolume(value);
-            parent.onVolumeChange(value);
+            mParent.onVolumeChange(value);
          } else if(queryResult.contains("AMT")) {
             //Muted status decode
             String resultStr = queryResult.substring(3, 5);
             int value = Integer.parseInt(resultStr);
             Log.v("TJS","Muted query result = '"+value+"'");
-            parent.onMuteChange(value == 1);
+            mParent.onMuteChange(value == 1);
             setMuted(value==1);
          } else if(queryResult.contains("SLI")) {
             //Source status decode
@@ -130,14 +132,13 @@ public class ReceiverClient extends Eiscp {
 //            int value = Integer.parseInt(resultStr);
 //            Log.v("TJS","Input query result = '"+value+"'");
             if(IscpCommands.commandMapInverse_.containsKey(resultStr)) {
-               parent.onInputChange(IscpCommands.commandMapInverse_.get(resultStr));
+               mParent.onInputChange(IscpCommands.commandMapInverse_.get(resultStr));
             }
          }
       }
    }
 
-   //FIXME - use AsyncTask rather than Thread? this would allow publishing status back
-   //to the caller (but I'm not sure this is really necessary for this application)
+   //FIXME - does not properly return isConnected value after thread completes
    public boolean closeSocket() {
       new AsyncTask<Void,Void,Void>() {
          @Override
@@ -153,27 +154,15 @@ public class ReceiverClient extends Eiscp {
       return false;//FIXME - return value not truly returned to caller
    }
 
-   //FIXME - use AsyncTask rather than Thread? this would allow publishing status back
-   //to the caller (but I'm not sure this is really necessary for this application)
-   //FIXME - upon connection, query for current power status & 
-   public boolean connectSocketThread() {
-      new Thread() {
-         public void run() {
-            ReceiverClient.super.connectSocket();
-         }
-      }.start();
-      return true;//FIXME - return value not truly returned to caller
-   }
-
    //redirect messages to Log.e() instead of System.err
-   public void errorMessage(String message) {
-      Log.e("ReceiverClient",message);
-   }
-
-   //redirect messages to Log.v() instead of System.out
-   public void debugMessage(String message) {
-      Log.v("ReceiverClient",message);
-   }
+//   public static void errorMessage(String message) {
+//      Log.e("ReceiverClient",message);
+//   }
+//
+//   //redirect messages to Log.v() instead of System.out
+//   public static void debugMessage(String message) {
+//      Log.v("ReceiverClient",message);
+//   }
    
    protected class QueryServerTask extends AsyncTask<String, Void, String> {
 
@@ -197,6 +186,12 @@ public class ReceiverClient extends Eiscp {
          super.onPostExecute(result);
       }
    }
+   
+   /***
+    * Interface for passing state information from the Client back to the Fragment/Activity(s)
+    * @author Trevor
+    *
+    */
    public interface CommandHandler {
       public void onMessageSent(String message);
       public void onMessageReceived(String message, String response);

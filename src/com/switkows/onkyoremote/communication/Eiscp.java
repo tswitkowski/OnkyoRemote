@@ -36,6 +36,8 @@ import java.io.*;
 import java.net.*;
 import java.util.Vector;
 
+import android.util.Log;
+
 /**
  *  A class that wraps the comunication to Onkyo/Integra devices using the
  *  ethernet Integra Serial Control Protocal (eISCP). This class uses class
@@ -59,10 +61,10 @@ public class Eiscp
   /**  The VM classpath (used in some methods)..  */
   public static String CLASSPATH = System.getProperty("class.path");
 
-  /**  The users home ditrectory.  */
+  /**  The users home directory.  */
   public static String USERHOME = System.getProperty("user.home");
 
-  /**  The users pwd ditrectory.  */
+  /**  The users pwd directory.  */
   public static String USERDIR = System.getProperty("user.dir");
 
   /** default receiver IP Address. **/
@@ -83,6 +85,7 @@ public class Eiscp
   private static DataInputStream in_ = null;
   private boolean connected_ = false;
 
+  @SuppressWarnings("unused")
   private static IscpCommands iscp_ = IscpCommands.getInstance();
 
   /** Var to hold the volume level to or from a message. **/
@@ -137,13 +140,15 @@ public class Eiscp
   }
 
   //overwriteable method which prints a message to STDERR by default
-  public void errorMessage(String message) {
-     System.err.println(message);
+  public static void errorMessage(String message) {
+//     System.err.println(message);
+     Log.e("EISCP", message);
   }
 
   //overwriteable method which prints a message to STDOUT by default
-  public void debugMessage(String message) {
-     System.out.println(message);
+  public static void debugMessage(String message) {
+//     System.out.println(message);
+     Log.d("EISCP", message);
   }
   /** Makes Chocolate glazed doughnuts. **/
   public void setReceiverIP( String ip) { receiverIP_ = ip;}
@@ -265,7 +270,7 @@ public class Eiscp
    * @param boolean flag to turn some debug output on/off
    * @return an int holding the decimal equivalent of the passed in HEX numberStr.
    **/
-  public int convertHexNumberStringToDecimal(char[] chars,  boolean dumpOut) {
+  public static int convertHexNumberStringToDecimal(char[] chars,  boolean dumpOut) {
      String out_put = "";
 
     //if (dumpOut) debugMessage("      AsciiHex: 0x"+chars);
@@ -286,7 +291,7 @@ public class Eiscp
 
      return Integer.parseInt(hexInt.toString());
   }
-  public int convertHexNumberStringToDecimal(String str,  boolean dumpOut)
+  public static int convertHexNumberStringToDecimal(String str,  boolean dumpOut)
   {
     char[] chars = str.toCharArray();
     return convertHexNumberStringToDecimal(chars, dumpOut);
@@ -358,10 +363,19 @@ public class Eiscp
     if (command==IscpCommands.VOLUME_SET)
       cmdStr = getVolumeCmdStr();
     else
-      cmdStr = iscp_.getCommandStr(command);
+      cmdStr = IscpCommands.getCommandStr(command);
+    char unitType = '1';
+    if(command == IscpCommands.SERVER_QUERY)
+       unitType = 'x';
+    StringBuilder packet = getEiscpPacket(cmdStr, unitType);
+    debugMessage("  eISCP msg size: "+packet.length() +"(0x"+Integer.toHexString(packet.length()) +") chars");
+    return packet;
+  }
 
+  public static StringBuilder getEiscpPacket(String command, char unitType)
+  {
     StringBuilder sb = new StringBuilder();
-    int eiscpDataSize = iscp_.getCommandStr(command).length() + 2 ; // this is the eISCP data size
+    int eiscpDataSize = command.length() + 2 ; // this is the eISCP data size
     int eiscpMsgSize = eiscpDataSize + 1 + 16 ; // this is the eISCP data size
 
     /* This is where I construct the entire message
@@ -398,16 +412,15 @@ public class Eiscp
     sb.append("!");
 
     // eISCP data - unittype char '1' is receiver
-    sb.append("1");
+    sb.append(unitType);
 
     // eISCP data - 3 char command and param    ie PWR01
-    sb.append(cmdStr);
+    sb.append(command);
 
     // msg end - EOF
     sb.append((char)Integer.parseInt("0D", 16));
 
     debugMessage("  eISCP data size: "+eiscpDataSize +"(0x"+Integer.toHexString(eiscpDataSize) +") chars");
-    debugMessage("  eISCP msg size: "+sb.length() +"(0x"+Integer.toHexString(sb.length()) +") chars");
 
     return sb;
   }
@@ -514,7 +527,7 @@ public class Eiscp
     {
       currResponse = (String) rv.elementAt(i);
       /* Send ALL responses OR just the one related to the commad sent??? */
-      if (returnAll || currResponse.startsWith(iscp_.getCommandStr(command).substring(0,3))) {
+      if (returnAll || currResponse.startsWith(IscpCommands.getCommandStr(command).substring(0,3))) {
         retVal+= currResponse+"\n";
         debugMessage("Accepting  message: '"+currResponse+"'");
       }
@@ -522,6 +535,7 @@ public class Eiscp
          debugMessage("Filtering message: '"+currResponse+"'");
     }
     
+    //FIXME - handle case where retVal is null string (i.e. readQueryResponses() return nothing, or returns something but not something that corresponds with query)
     if (closeSocket) closeSocket();
     
     return retVal ;
@@ -542,11 +556,6 @@ public class Eiscp
     int totBytesReceived = 0;
 //    int i=0;
     int packetCounter=0;
-//    int headerSizeDecimal;
-    int dataSizeDecimal = 0;
-    char endChar1 ='!';// NR-5008 response sends 3 chars to terminate the packet - 0x1a 0x0d 0x0a
-    char endChar2 ='!';
-    char endChar3 ='!';
 
     if(connected_)
     {
@@ -559,11 +568,11 @@ public class Eiscp
         {
           totBytesReceived = 0;
           StringBuilder msgBuffer = new StringBuilder("");
-          if (debugging) System.out.print( " Packet"+"["+packetCounter+"]:");
+          if (debugging) debugMessage(" Packet"+"["+packetCounter+"]:");
           
           /* Read ALL the incoming Bytes and buffer them */ 
           // *******************************************
-          if (debugging) System.out.print(""+numBytesReceived);
+          if (debugging) debugMessage("numBytesReceived = "+numBytesReceived);
           while(numBytesReceived>0 )
           {
             totBytesReceived+=numBytesReceived;
@@ -574,76 +583,11 @@ public class Eiscp
               numBytesReceived = in_.read(responseBytes);
             if (debugging) System.out.print(" "+numBytesReceived);
           }
-          if (debugging) debugMessage(null);
-          convertStringToHex(msgBuffer.toString(), debugging);
-          
-          /* Response is done... process it into dataMessages */
-          // *******************************************
-          char [] responseChars = msgBuffer.toString().toCharArray(); // use the charArray to step through
-          int responseByteCnt = 0;
-          char versionChar = '1';
-          char dataStartChar = '!';
-          char dataUnitChar = '1';
-          
-          // loop through all the chars and split out the dataMessages
-          while (responseByteCnt< totBytesReceived)
-          {
-            /* read Header */
-            // 1st 4 chars are the leadIn
-            responseByteCnt+=4;
-            
-            // read headerSize
-            char [] headerSizeBytes = {responseChars[responseByteCnt++],
-                                       responseChars[responseByteCnt++],
-                                       responseChars[responseByteCnt++],
-                                       responseChars[responseByteCnt++]} ;
-            // 4 char Big Endian data size
-            char [] dataSizeBytes = { responseChars[responseByteCnt++],
-                                      responseChars[responseByteCnt++],
-                                      responseChars[responseByteCnt++],
-                                      responseChars[responseByteCnt++]} ;
-            if (debugging) debugMessage(" -HeaderSize-");
-//            headerSizeDecimal = convertHexNumberStringToDecimal(new String(headerSizeBytes),debugging);
-            if (debugging) debugMessage(" -DataSize-");
-            dataSizeDecimal = convertHexNumberStringToDecimal(new String(dataSizeBytes),debugging);
-                                      
-            // version
-            versionChar = responseChars[responseByteCnt++];
-            
-            // 3 reserved bytes
-            responseByteCnt+=3;
-            int dataByteCnt = 0;
-            
-            // Now the data message
-            dataStartChar = responseChars[responseByteCnt++]; // parse and throw away (like parsley)
-            dataUnitChar = responseChars[responseByteCnt++]; // dito
-            char [] dataMessage = new char [dataSizeDecimal];
-            
-            /* Get the dataMessage from this response */
-            // NR-5008 response sends 3 chars to terminate the packet - so DON't include them in the message
-            while( dataByteCnt < (dataSizeDecimal-5) && responseByteCnt< (totBytesReceived-3))
-            {
-              dataMessage[dataByteCnt++] = responseChars[responseByteCnt++];
-            }
-            if (debugging) debugMessage(" -DataMessage-");
-            if (debugging) debugMessage("    "+(new String(dataMessage))+ "\n");
-            retVal.addElement(new String(dataMessage));
-            
-            // Read the end packet char(s) "[EOF]"
-            // [EOF]			End of File		ASCII Code 0x1A
-            // NOTE: the end of packet char (0x1A) for a response message is DIFFERENT that the sent message
-            // NOTE: ITs also different than what is in the Onkyo eISCP docs
-            // NR-5008 sends 3 chars to terminate the packet - 0x1a 0x0d 0x0a
-            endChar1 = responseChars[responseByteCnt++];
-            endChar2 = responseChars[responseByteCnt++];
-            endChar3 = responseChars[responseByteCnt++];
-            if (endChar1 == (char)Integer.parseInt("1A", 16) &&
-                endChar2 == (char)Integer.parseInt("0D", 16) &&
-                endChar3 == (char)Integer.parseInt("0A", 16) 
-               ) if (debugging) debugMessage(" EndOfPacket["+packetCounter+"]\n");
-            packetCounter++;
-          }// 
-          
+//          if(debugging)
+//             debugMessage("numBytesReceived = "+numBytesReceived+", totBytesReceived = "+totBytesReceived+", message.length = "+msgBuffer.toString().length());
+
+          //push rest of parsing to sub-method (note: string MUST be totBytesReceived long)
+          retVal.addAll(parsePacketBytes(msgBuffer.toString().substring(0, totBytesReceived), false));
         }
 
       }
@@ -665,9 +609,101 @@ public class Eiscp
     return retVal;
   }
 
+  public static Vector<String> parsePacketBytes(String packetData, boolean debugging) {
+     Vector <String> retVal = new Vector <String> ();
+     int packetCounter=0;
+//   int headerSizeDecimal;
+     int dataSizeDecimal = 0;
+     char endChar1 ='!';// NR-5008 response sends 3 chars to terminate the packet - 0x1a 0x0d 0x0a
+     char endChar2 ='!';
+     char endChar3 ='!';
+     
+     char [] responseChars = packetData.toCharArray(); // use the charArray to step through
+     int totBytesReceived = responseChars.length;
+     int responseByteCnt = 0;
+//     char versionChar = '1';
+//     char dataStartChar = '!';
+//     char dataUnitChar = '1';
+     
+     // loop through all the chars and split out the dataMessages
+     while (responseByteCnt< totBytesReceived)
+     {
+       /* read Header */
+       // 1st 4 chars are the leadIn
+        //FIXME - parse 4 bytes. they should always equal 'ISCP'. assert error if they do not match
+       responseByteCnt+=4;
+       
+       // read headerSize
+       char [] headerSizeBytes = {responseChars[responseByteCnt++],
+                                  responseChars[responseByteCnt++],
+                                  responseChars[responseByteCnt++],
+                                  responseChars[responseByteCnt++]} ;
+       // 4 char Big Endian data size
+       char [] dataSizeBytes = { responseChars[responseByteCnt++],
+                                 responseChars[responseByteCnt++],
+                                 responseChars[responseByteCnt++],
+                                 responseChars[responseByteCnt++]} ;
+       if (debugging) debugMessage(" -HeaderSize-");
+//       headerSizeDecimal = convertHexNumberStringToDecimal(new String(headerSizeBytes),debugging);
+       if (debugging) debugMessage(" -DataSize-");
+       dataSizeDecimal = convertHexNumberStringToDecimal(new String(dataSizeBytes),debugging);
+                                 
+       // version
+//       versionChar = responseChars[responseByteCnt++];
+       responseByteCnt++;
+       
+       // 3 reserved bytes
+       responseByteCnt+=3;
+       int dataByteCnt = 0;
+       
+       // Now the data message
+//       dataStartChar = responseChars[responseByteCnt++]; // parse and throw away (like parsley)
+//       dataUnitChar = responseChars[responseByteCnt++]; // dito
+       responseByteCnt += 2;
+       char [] dataMessage;
+       if(dataSizeDecimal > 200) {
+          dataMessage = new char[1];
+          errorMessage("Framing error: data_size calculated to be: "+dataSizeDecimal+". Aborting packet parse...");
+          errorMessage("Remaining message: '"+packetData.substring(responseByteCnt-14)+"'");
+          debugMessage("Start of message within packet: " + (responseByteCnt-14));
+          debugMessage("Full Packet: '"+packetData+"'");
+       } else
+          dataMessage = new char [dataSizeDecimal];
+       
+       /* Get the dataMessage from this response */
+       // NR-5008 response sends 3 chars to terminate the packet - so DON't include them in the message
+       while( dataByteCnt < (dataSizeDecimal-5) && responseByteCnt< (totBytesReceived-3))
+       {
+         dataMessage[dataByteCnt++] = responseChars[responseByteCnt++];
+       }
+       if (debugging) debugMessage(" -DataMessage-");
+       if (debugging) debugMessage("    "+(new String(dataMessage))+ "\n");
+       retVal.addElement(new String(dataMessage));
+       
+       // Read the end packet char(s) "[EOF]"
+       // [EOF]       End of File    ASCII Code 0x1A
+       // NOTE: the end of packet char (0x1A) for a response message is DIFFERENT that the sent message
+       // NOTE: ITs also different than what is in the Onkyo eISCP docs
+       // NR-5008 sends 3 chars to terminate the packet - 0x1a 0x0d 0x0a
+       endChar1 = responseChars[responseByteCnt++];
+       endChar2 = responseChars[responseByteCnt++];
+       endChar3 = responseChars[responseByteCnt++];
+       if (endChar1 == (char)Integer.parseInt("1A", 16) &&
+           endChar2 == (char)Integer.parseInt("0D", 16) &&
+           endChar3 == (char)Integer.parseInt("0A", 16) 
+          ) {
+          if (debugging)
+             debugMessage(" EndOfPacket["+packetCounter+"]\n");
+       }
+       else
+          break;//if we don't find the correct end of packet frame, abort
+       packetCounter++;
+     }
+     return retVal;
+  }
 
   /** This method creates the set volume command based on the passed value. **/
-  public String getVolumeCmdStr(){return iscp_.getVolumeCmdStr((int)volume_);}
+  public String getVolumeCmdStr(){return IscpCommands.getVolumeCmdStr((int)volume_);}
 
 
   /** This method takes the  3 character response from the USB Play status query (NETUSB_PLAY_STATUS_QUERY) and creates a human readable String. 

@@ -38,6 +38,8 @@ public class ReceiverDetailActivity extends FragmentActivity {
          // using a fragment transaction.
          Bundle arguments = new Bundle();
          arguments.putString(ReceiverDetailFragment.ARG_ITEM_ID, getIntent().getStringExtra(ReceiverDetailFragment.ARG_ITEM_ID));
+         arguments.putString(ReceiverDetailFragment.ARG_IP_ADDR, getIntent().getStringExtra(ReceiverDetailFragment.ARG_IP_ADDR));
+         arguments.putInt(ReceiverDetailFragment.ARG_TCP_PORT, getIntent().getIntExtra(ReceiverDetailFragment.ARG_TCP_PORT,0));
          ReceiverDetailFragment fragment = new ReceiverDetailFragment();
          fragment.setArguments(arguments);
          getSupportFragmentManager().beginTransaction().add(R.id.receiver_detail_container, fragment).commit();
