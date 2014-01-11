@@ -1,12 +1,19 @@
 package com.switkows.onkyoremote;
 
+import java.util.Vector;
+
+import com.switkows.onkyoremote.communication.IscpCommands;
 import com.switkows.onkyoremote.communication.IscpDeviceDiscover;
+import com.switkows.onkyoremote.communication.ReceiverClient;
+import com.switkows.onkyoremote.communication.ReceiverClient.CommandHandler;
+import com.switkows.onkyoremote.communication.ReceiverClient.CommandSendCallbacks;
 import com.switkows.onkyoremote.communication.ReceiverInfo;
 
 import android.app.Activity;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
+import android.util.Log;
 
 /***
  * This fragment is used to hold background information for the main application (and its fragments)
@@ -20,7 +27,7 @@ import android.support.v4.app.Fragment;
  *
  */
 //FIXME - add list of Eiscp structures, to track 1+ receiver connections, so we retain their state across orientation changes?
-public class ReceiverBackgroundFragment extends Fragment {
+public class ReceiverBackgroundFragment extends Fragment implements CommandHandler, CommandSendCallbacks {
    /**
     * Callback interface through which the fragment will report the
     * task's progress and results back to the Activity.
@@ -30,7 +37,10 @@ public class ReceiverBackgroundFragment extends Fragment {
    }
   
    private TaskCallbacks mCallbacks;
+   private CommandHandler mCommandCallbacks;
+//   private BackgroundListenerTask snooper; //background status message listener
    private IscpDeviceDiscover columbus; //discovery mechanism and state-keeper
+   private Vector<ReceiverClient> mEiscpInterfaces;
 
    /**
     * Hold a reference to the parent Activity so we can report the
@@ -41,12 +51,16 @@ public class ReceiverBackgroundFragment extends Fragment {
    @Override
    public void onAttach(final Activity activity) {
      super.onAttach(activity);
+     if(mEiscpInterfaces == null)
+        mEiscpInterfaces = new Vector<ReceiverClient>();
      if(activity instanceof TaskCallbacks)
         mCallbacks = (TaskCallbacks) activity;
      else
         throw new ClassCastException(activity.toString()+" must implement TaskCallbacks");
-     if(columbus == null) {
-     }
+     if(activity instanceof CommandHandler)
+        mCommandCallbacks = (CommandHandler)activity;
+     else
+        throw new ClassCastException(activity.toString()+" must implement CommandHandler");
    }
   
    /**
@@ -95,6 +109,24 @@ public class ReceiverBackgroundFragment extends Fragment {
       return false;
    }
    
+   public ReceiverClient getReceiverClient(int index) {
+      if(!mEiscpInterfaces.isEmpty())
+         return (ReceiverClient)mEiscpInterfaces.get(index%mEiscpInterfaces.size());
+      return null;
+   }
+   
+   public void onDiscoveryComplete() {
+      if(mCallbacks != null)
+         mCallbacks.onDiscoveryComplete();
+      if(columbus.receiversPresent() && mEiscpInterfaces.isEmpty()) {
+         ReceiverInfo receiver = columbus.getReceiver(0);//FIXME - add configuration/dialog box/something
+         ReceiverClient eiscpInstance = new ReceiverClient(this,receiver);
+//         ReceiverClient eiscpInstance = new ReceiverClient(this,receiver.getIpAddr(), receiver.getTcpPort());
+         eiscpInstance.initiateConnection();
+         mEiscpInterfaces.add(eiscpInstance);
+      }
+   }
+   
    /***
     * Simple AsyncTask implementation to wrap auto-discovery procedure into a thread
     * 
@@ -109,8 +141,116 @@ public class ReceiverBackgroundFragment extends Fragment {
       }
       @Override
       protected void onPostExecute(IscpDeviceDiscover result) {
+         onDiscoveryComplete();
+      }
+   }
+   
+   /***
+    * Async task which runs indefinitely(?) listening to server for status updates
+    * 
+    * @author Trevor
+    *
+    */
+   private class BackgroundListenerTask extends AsyncTask<Void,Void,Void> {
+
+      @Override
+      protected Void doInBackground(Void... params) {
+         // TODO Auto-generated method stub
+         return null;
+      }
+      @Override
+      protected void onPostExecute(Void result) {
          if(mCallbacks != null)
             mCallbacks.onDiscoveryComplete();
+      }
+      
+   }
+
+   @Override
+   public void onMessageSent(String message) {
+      if(mCommandCallbacks != null)
+         mCommandCallbacks.onMessageSent(message);
+   }
+
+   @Override
+   public void onMessageReceived(String message, String response) {
+      if(mCommandCallbacks != null)
+         mCommandCallbacks.onMessageReceived(message,response);
+   }
+
+   @Override
+   public void onInputChange(int sourceVal) {
+      if(mCommandCallbacks != null)
+         mCommandCallbacks.onInputChange(sourceVal);
+   }
+
+   @Override
+   public void onPowerChange(boolean powered_on) {
+      if(mCommandCallbacks != null)
+         mCommandCallbacks.onPowerChange(powered_on);
+   }
+
+   @Override
+   public void onMuteChange(boolean muted) {
+      if(mCommandCallbacks != null)
+         mCommandCallbacks.onMuteChange(muted);
+   }
+
+   @Override
+   public void onVolumeChange(float volume) {
+      if(mCommandCallbacks != null)
+         mCommandCallbacks.onVolumeChange(volume);
+   }
+
+   @Override
+   public void onConnectionChange(boolean isConnected) {
+      if(mCommandCallbacks != null)
+         mCommandCallbacks.onConnectionChange(isConnected);
+   }
+
+   @Override
+   public ReceiverInfo getReceiverInfo() {
+      return getReceiver(0);
+   }
+
+   @Override
+   public void sendCommand(int command, boolean sendIfOff) {
+      ReceiverClient client = getReceiverClient(0);//FIXME - allow for control
+      if(client!=null && (sendIfOff || client.getPoweredOn()))
+         client.sendCommand(command);
+   }
+
+   @Override
+   public void sendQueryCommand(int command) {
+      // TODO Auto-generated method stub
+      
+   }
+
+   @Override
+   public boolean toggleConnection() {
+      ReceiverClient client = getReceiverClient(0);//FIXME - allow for control
+      if(client!=null) {
+         if(client.isConnected()) {
+            client.closeSocket();
+            Log.v("TJS","Dis-connected");
+         } else {
+            client.initiateConnection();
+            Log.v("TJS","Connected");
+         }
+         mCommandCallbacks.onConnectionChange(client.isConnected());
+         return client.isConnected();
+      }
+      return false;
+   }
+
+   @Override
+   public void setVolume(float volume) {
+      ReceiverClient client = getReceiverClient(0);//FIXME - allow for control
+      if(client!=null) {
+         //set local state
+         client.setVolume(volume);
+         //now send command to server
+         client.sendCommand(IscpCommands.VOLUME_SET);
       }
    }
 }

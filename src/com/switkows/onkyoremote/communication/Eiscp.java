@@ -91,12 +91,6 @@ public class Eiscp
   /** Var to hold the volume level to or from a message. **/
   private float volume_ = 32;
   
-  /** Var to hold the power status **/
-  private boolean powered_on_ = false;
-
-  /** Var to hold mute status **/
-  private boolean muted_     = false;
-
   /** Simple class Constructor (using deafult IP and port) that gets all the class command constants set-up along with their command lookup maps (commandNameMap_ and commandMap_) . **/
   public Eiscp()
   {
@@ -372,6 +366,12 @@ public class Eiscp
     return packet;
   }
 
+  /**
+   * Wraps a command (ISCP message) into an eISCP packet
+   * @param command - ISCP message (a piece of it)
+   * @param unitType - unit type. normally '1', but for some messages (Server Query, for example) it varies
+   * @return string containing TCP/UDP packet payload
+   */
   public static StringBuilder getEiscpPacket(String command, char unitType)
   {
     StringBuilder sb = new StringBuilder();
@@ -460,14 +460,6 @@ public class Eiscp
         //out_.writeChars(convertStringToHex(sb.toString(), false));
         out_.flush();
         debugMessage("sent!" );
-        if(command == IscpCommands.POWER_ON)
-           setPoweredOn(true);
-        else if(command == IscpCommands.POWER_OFF)
-           setPoweredOn(false);
-        else if(command == IscpCommands.UNMUTE)
-           setMuted(false);
-        else if(command == IscpCommands.MUTE)
-           setMuted(true);
       }
       catch(IOException ioException)
       {
@@ -612,7 +604,7 @@ public class Eiscp
   public static Vector<String> parsePacketBytes(String packetData, boolean debugging) {
      Vector <String> retVal = new Vector <String> ();
      int packetCounter=0;
-//   int headerSizeDecimal;
+     int headerSizeDecimal;
      int dataSizeDecimal = 0;
      char endChar1 ='!';// NR-5008 response sends 3 chars to terminate the packet - 0x1a 0x0d 0x0a
      char endChar2 ='!';
@@ -634,19 +626,25 @@ public class Eiscp
        responseByteCnt+=4;
        
        // read headerSize
-       char [] headerSizeBytes = {responseChars[responseByteCnt++],
-                                  responseChars[responseByteCnt++],
-                                  responseChars[responseByteCnt++],
-                                  responseChars[responseByteCnt++]} ;
+       if(debugging) {
+          responseByteCnt += 4;//in lieu of decoding bytes
+          char [] headerSizeBytes = {responseChars[responseByteCnt++],
+                                     responseChars[responseByteCnt++],
+                                     responseChars[responseByteCnt++],
+                                     responseChars[responseByteCnt++]} ;
+           headerSizeDecimal = convertHexNumberStringToDecimal(new String(headerSizeBytes),debugging);
+           if (debugging) debugMessage(" -HeaderSize-"+headerSizeDecimal);
+       } else {
+          //in lieu of decoding size bytes, 
+          responseByteCnt += 4;
+       }
        // 4 char Big Endian data size
        char [] dataSizeBytes = { responseChars[responseByteCnt++],
                                  responseChars[responseByteCnt++],
                                  responseChars[responseByteCnt++],
                                  responseChars[responseByteCnt++]} ;
-       if (debugging) debugMessage(" -HeaderSize-");
-//       headerSizeDecimal = convertHexNumberStringToDecimal(new String(headerSizeBytes),debugging);
-       if (debugging) debugMessage(" -DataSize-");
        dataSizeDecimal = convertHexNumberStringToDecimal(new String(dataSizeBytes),debugging);
+       if (debugging) debugMessage(" -DataSize-"+dataSizeDecimal);
                                  
        // version
 //       versionChar = responseChars[responseByteCnt++];
@@ -786,35 +784,4 @@ public class Eiscp
     volume_ = volume;
   }
 
-  /** get the class powered_on_.
-   * 
-   * @return the powered_on_ status
-   */
-  public boolean getPoweredOn() {
-    return powered_on_;
-  }
-
-  /** sets the class powered_on_.
-   * 
-   * @param the powered_on status
-   */
-  public void setPoweredOn(boolean powered_on) {
-    powered_on_ = powered_on;
-  }
-
-  /** get the class muted_.
-   * 
-   * @return the muted_ status
-   */
-  public boolean getMuted() {
-    return muted_;
-  }
-
-  /** sets the class muted_.
-   * 
-   * @param the muted status
-   */
-  public void setMuted(boolean muted) {
-    muted_ = muted;
-  }
 } // class

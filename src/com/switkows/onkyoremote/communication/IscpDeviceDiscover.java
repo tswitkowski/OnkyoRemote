@@ -16,6 +16,7 @@ public class IscpDeviceDiscover {
    public final static int    DEFAULT_ISCP_DISCOVERY_UDP_PORT  = 60128;
    
    private Vector<ReceiverInfo> mReceivers;
+   @SuppressWarnings("unused")
    private IscpCommands mCommands;
    
    public void discover(final Context context, final Eiscp eiscp) {
@@ -126,5 +127,9 @@ public class IscpDeviceDiscover {
       if(mReceivers.isEmpty())
          return null;
       return mReceivers.get(index%mReceivers.size());
+   }
+   
+   public int getNumReceiversPresent() {
+      return mReceivers.size();
    }
 }

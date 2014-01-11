@@ -1,10 +1,10 @@
 package com.switkows.onkyoremote;
 
 import com.switkows.onkyoremote.communication.ReceiverInfo;
+import com.switkows.onkyoremote.communication.ReceiverClient;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
 import android.util.Log;
@@ -24,16 +24,16 @@ import android.widget.Toast;
  * This activity also implements the required {@link ReceiverListFragment.Callbacks} interface to listen for item
  * selections.
  */
-public class ReceiverListActivity extends FragmentActivity implements ReceiverListFragment.Callbacks, ReceiverBackgroundFragment.TaskCallbacks {
+public class ReceiverListActivity extends FragmentActivity implements ReceiverListFragment.Callbacks, ReceiverBackgroundFragment.TaskCallbacks, ReceiverClient.CommandHandler, ReceiverClient.CommandSendCallbacks {
 
    /**
     * Whether or not the activity is in two-pane mode, i.e. running on a tablet
     * device.
     */
    private boolean mTwoPane;
-   
+
    private ReceiverBackgroundFragment mBackgroundFragment;
-   
+
 
    @Override
    protected void onCreate(Bundle savedInstanceState) {
@@ -47,10 +47,9 @@ public class ReceiverListActivity extends FragmentActivity implements ReceiverLi
       if(mBackgroundFragment == null) {
          Log.v("TJSDebug","Background task started...");
          mBackgroundFragment = new ReceiverBackgroundFragment();
-         
+
          fm.beginTransaction().add(mBackgroundFragment, "background_frag").commit();
       }
-
 
       if(findViewById(R.id.receiver_detail_container) != null) {
          // The detail container view will be present only in the
@@ -59,21 +58,17 @@ public class ReceiverListActivity extends FragmentActivity implements ReceiverLi
          // activity should be in two-pane mode.
          mTwoPane = true;
 
-         Bundle arguments = new Bundle();
-         arguments.putString(ReceiverDetailFragment.ARG_ITEM_ID, "1");
-         mCommandFragment = new ReceiverDetailFragment();
-         mCommandFragment.setArguments(arguments);
-
          // In two-pane mode, list items should be given the
          // 'activated' state when touched.
          ((ReceiverListFragment)fm.findFragmentById(R.id.receiver_list)).setActivateOnItemClick(true);
+         mCommandFragment = (ReceiverDetailFragment)fm.findFragmentById(R.id.receiver_detail_container);
+         if(mCommandFragment!=null)
+            mCommandFragment.setReceiverInfo(getReceiverInfo());
       }
-
-      // TODO: If exposing deep links into your app, handle intents here.
    }
 
-   private Fragment mLogFragment;
-   private Fragment mCommandFragment;
+   private ReceiverDetailFragment mLogFragment;
+   private ReceiverDetailFragment mCommandFragment;
    /**
     * Callback method from {@link ReceiverListFragment.Callbacks} indicating that the item with the given ID was
     * selected.
@@ -90,11 +85,11 @@ public class ReceiverListActivity extends FragmentActivity implements ReceiverLi
          // fragment transaction.
 
          //re-use fragment if one has already been created. else, create a new one with the appropriate content
-         Fragment fragment = null;
+         ReceiverDetailFragment fragment = null;
          int idInt = Integer.parseInt(id);
-         if(idInt==0)
+         if(idInt==1)
             fragment = mCommandFragment;
-         else if(idInt==1)
+         else if(idInt==2)
             fragment = mLogFragment;
          if(fragment==null) {
             Bundle arguments = new Bundle();
@@ -106,9 +101,11 @@ public class ReceiverListActivity extends FragmentActivity implements ReceiverLi
             fragment = new ReceiverDetailFragment();
             fragment.setArguments(arguments);
             fragment.setRetainInstance(true);
-            if(idInt==0)
+            fragment.setReceiverInfo(getReceiverInfo());
+
+            if(idInt==1)
                mCommandFragment = fragment;
-            else if(idInt==1)
+            else if(idInt==2)
                mLogFragment = fragment;
          } else {
             Log.v("TJS","Restored saved fragment");
@@ -129,8 +126,79 @@ public class ReceiverListActivity extends FragmentActivity implements ReceiverLi
       }
    }
 
+   //simply route interface calls to appropriate destination (fragment)
+   //FIXME - will be more complex when I allow multiple receivers to be connected at the same time...
    public void onDiscoveryComplete() {
       if(mBackgroundFragment != null)
          Toast.makeText(this, mBackgroundFragment.printAllReceivers(), Toast.LENGTH_LONG).show();
+   }
+
+   @Override
+   public void onMessageSent(String message) {
+      if(mLogFragment!=null)
+         mLogFragment.onMessageSent(message);
+   }
+
+   @Override
+   public void onMessageReceived(String message, String response) {
+      if(mLogFragment!=null)
+         mLogFragment.onMessageReceived(message, response);
+   }
+
+   @Override
+   public void onInputChange(int sourceVal) {
+      if(mCommandFragment!=null)
+         mCommandFragment.onInputChange(sourceVal);
+   }
+
+   @Override
+   public void onPowerChange(boolean powered_on) {
+      if(mCommandFragment!=null)
+         mCommandFragment.onPowerChange(powered_on);
+   }
+
+   @Override
+   public void onMuteChange(boolean muted) {
+      if(mCommandFragment!=null)
+         mCommandFragment.onMuteChange(muted);
+   }
+
+   @Override
+   public void onVolumeChange(float volume) {
+      if(mCommandFragment!=null)
+         mCommandFragment.onVolumeChange(volume);
+   }
+
+   @Override
+   public void onConnectionChange(boolean isConnected) {
+      if(mCommandFragment!=null)
+         mCommandFragment.onConnectionChange(isConnected);
+   }
+
+   @Override
+   public ReceiverInfo getReceiverInfo() {
+      if(mCommandFragment!=null)
+         return mBackgroundFragment.getReceiver(0);//FIXME - find index
+      return null;
+   }
+
+   @Override
+   public void sendCommand(int command, boolean sendIfOff) {
+      mBackgroundFragment.sendCommand(command, sendIfOff);
+   }
+
+   @Override
+   public void sendQueryCommand(int command) {
+      mBackgroundFragment.sendQueryCommand(command);
+   }
+
+   @Override
+   public boolean toggleConnection() {
+      return mBackgroundFragment.toggleConnection();
+   }
+
+   @Override
+   public void setVolume(float volume) {
+      mBackgroundFragment.setVolume(volume);
    }
 }

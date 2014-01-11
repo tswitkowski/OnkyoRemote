@@ -17,9 +17,11 @@ public class ReceiverInfo {
    private final String id;
    
    //Dynamic information
-   private float volume;
+   private float   volume;
    private boolean poweredOn;
    private boolean muted;
+   private boolean isConnected;
+   private int     source;
    
    public ReceiverInfo(String ip, String port, String model, String region, String id) {
       ipAddr = ip;
@@ -66,6 +68,22 @@ public class ReceiverInfo {
 
    public void setMuted(boolean muted) {
       this.muted = muted;
+   }
+
+   public boolean isConnected() {
+      return isConnected;
+   }
+
+   public void setConnected(boolean isConnected) {
+      this.isConnected = isConnected;
+   }
+
+   public int getSource() {
+      return source;
+   }
+
+   public void setSource(int source) {
+      this.source = source;
    }
 
    public String printMe() {

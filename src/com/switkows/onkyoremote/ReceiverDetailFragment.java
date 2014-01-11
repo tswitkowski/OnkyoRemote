@@ -28,8 +28,9 @@ import android.widget.ToggleButton;
 
 import com.switkows.onkyoremote.communication.IscpCommands;
 import com.switkows.onkyoremote.communication.IscpDeviceDiscover;
-import com.switkows.onkyoremote.communication.ReceiverClient;
 import com.switkows.onkyoremote.communication.ReceiverClient.CommandHandler;
+import com.switkows.onkyoremote.communication.ReceiverClient.CommandSendCallbacks;
+import com.switkows.onkyoremote.communication.ReceiverInfo;
 import com.switkows.onkyoremote.dummy.DummyContent;
 
 /**
@@ -50,18 +51,28 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
    //        but since this is a demo (i.e. non-final implementation), this is okay, maybe forever
    private boolean isCommandFragment;
 
-   private ReceiverClient eISCPInterface;
+   private ReceiverInfo mReceiverInfo;
+
+   private CommandSendCallbacks mCommandSender;
+
    /**
     * The dummy content this fragment is presenting.
     */
    private DummyContent.DummyItem mItem;
-   
+
    /**
     * Mandatory empty constructor for the fragment manager to instantiate the
     * fragment (e.g. upon screen orientation changes).
     */
 
    public ReceiverDetailFragment() {}
+
+   @Override
+   public void onAttach(Activity activity) {
+      super.onAttach(activity);
+      setReceiverInfo(((CommandHandler)activity).getReceiverInfo());
+      mCommandSender = ((CommandSendCallbacks)activity);
+   }
 
    @Override
    public void onCreate(Bundle savedInstanceState) {
@@ -79,25 +90,7 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
             isCommandFragment = false;
       }
       if(isCommandFragment) {
-         setRetainInstance(true);
          setHasOptionsMenu(true);
-
-         //start connection
-         //FIXME - pull data for connection
-         String ip_addr = ReceiverClient.DEFAULT_IP_ADDR;
-         int tcp_port = ReceiverClient.DEFAULT_TCP_PORT;
-         if(getArguments().containsKey(ARG_IP_ADDR)) {
-            ip_addr = getArguments().getString(ARG_IP_ADDR);
-//            Log.v("TJSDEBUG","Setting port number from parent : "+ip_addr);
-         }
-         if(getArguments().containsKey(ARG_TCP_PORT)) {
-            tcp_port = getArguments().getInt(ARG_TCP_PORT);
-//            Log.v("TJSDEBUG","Setting port number from parent : "+tcp_port);
-         }
-         if(eISCPInterface == null) {
-            eISCPInterface = new ReceiverClient(this,ip_addr,tcp_port);
-            eISCPInterface.initiateConnection();
-         }
       }
    }
 
@@ -110,14 +103,7 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
       super.onCreateOptionsMenu(menu, inflater);
 //      Log.v("TJSDebug","called onCreateOptionsMenu");
       //restore state (i don't like doing it here, but i need to do it fairly late
-      if(eISCPInterface != null) {
-//         Log.v("TJSDEBUG", "onAttach called. setting up GUI state");
-         onPowerChange(eISCPInterface.getPoweredOn());
-         onConnectionChange(eISCPInterface.isConnected());
-         onMuteChange(eISCPInterface.getMuted());
-         onVolumeChange(eISCPInterface.getVolume());
-      }
-
+      setReceiverInfo(mReceiverInfo);
    }
 
    @Override
@@ -161,8 +147,8 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
                //Note : only has an effect if the power is already on (this may not be desirable...
                //       I will later change to set the value of the Array to the current input
                //       value, on startup, so we don't turn on device upon app powerup)
-               if(eISCPInterface.getPoweredOn())
-                  eISCPInterface.sendCommand(IscpCommands.SOURCE_DVR + arg2);//FIXME - apply proper addition. This seems to work, but it's not very robust
+               if(mCommandSender!=null)
+                  mCommandSender.sendCommand(IscpCommands.SOURCE_DVR + arg2, false);
             }
             @Override
             public void onNothingSelected(AdapterView<?> arg0) {
@@ -190,7 +176,7 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
             button.setOnClickListener(new OnClickListener() {
                @Override
                public void onClick(View v) {
-                  eISCPInterface.sendCommand(v.getId());
+                  mCommandSender.sendCommand(v.getId(), true);
                }
             });
             layout.addView(button);
@@ -208,6 +194,16 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
       return rootView;
    }
 
+   public void setReceiverInfo(ReceiverInfo info) {
+      mReceiverInfo = info;
+      if(mReceiverInfo != null) {
+//       Log.v("TJSDEBUG", "onAttach called. setting up GUI state");
+         onPowerChange(mReceiverInfo.isPoweredOn());
+         onConnectionChange(mReceiverInfo.isConnected());
+         onMuteChange(mReceiverInfo.isMuted());
+         onVolumeChange(mReceiverInfo.getVolume());
+      }
+   }
    @Override
    public void onMessageSent(String message) {
       // FIXME - add logging to other fragment?
@@ -223,7 +219,7 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
       if(getView()!=null) {
          Spinner view = (Spinner)this.getView().findViewById(R.id.inputSelector);
          Log.v("TJS","Received "+sourceVal);
-         view.setSelection(sourceVal-IscpCommands.SOURCE_DVR);//FIXME - apply proper addition. This seems to work, but it's not very robust
+         view.setSelection(sourceVal-IscpCommands.SOURCE_DVR);
       }
    }
 
@@ -231,15 +227,7 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
    public void onPowerChange(boolean powered_on) {}
 
    public void toggleConnection() {
-      if(eISCPInterface != null) {
-         if(eISCPInterface.isConnected()) {
-            eISCPInterface.closeSocket();
-            Log.v("TJS","Dis-connected");
-         } else {
-            eISCPInterface.initiateConnection();
-            Log.v("TJS","Connected");
-         }
-      }
+      mCommandSender.toggleConnection();
    }
 
    @Override
@@ -280,22 +268,20 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
          view.setProgress((int)volume);
       }
    }
-   
+
    public void setVolume(float volume) {
-      //set local state
-      eISCPInterface.setVolume(volume);
-      //now send command to server
-      eISCPInterface.sendCommand(IscpCommands.VOLUME_SET);
+      mCommandSender.setVolume(volume);
    }
 
    public void setMuted(boolean muted) {
       //set local state
-      eISCPInterface.setMuted(muted);
+      if(mReceiverInfo!=null)
+         mReceiverInfo.setMuted(muted);
       //now send command to server
       if(muted)
-         eISCPInterface.sendCommand(IscpCommands.MUTE);
+         mCommandSender.sendCommand(IscpCommands.MUTE,true);
       else
-         eISCPInterface.sendCommand(IscpCommands.UNMUTE);
+         mCommandSender.sendCommand(IscpCommands.UNMUTE,true);
    }
 
    private class MuteListener implements OnCheckedChangeListener {
@@ -315,21 +301,25 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
       }
       @Override
       public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-         // TODO Auto-generated method stub
          if(fromUser) {
             mParent.setVolume((float)seekBar.getProgress());
          }
-         
+
       }
       @Override
       public void onStartTrackingTouch(SeekBar seekBar) {
          // TODO Auto-generated method stub
-         
+
       }
       @Override
       public void onStopTrackingTouch(SeekBar seekBar) {
          // TODO Auto-generated method stub
-         
+
       }
+   }
+   @Override
+   public ReceiverInfo getReceiverInfo() {
+      // TODO Auto-generated method stub
+      return null;
    }
 }
