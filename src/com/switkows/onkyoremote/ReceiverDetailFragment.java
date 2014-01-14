@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
+import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -187,7 +188,9 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
 
          // Show the dummy content as text in a TextView.
          if(mItem != null) {
-            ((TextView)rootView.findViewById(R.id.receiver_detail)).setText(mItem.content);
+            TextView view = (TextView)rootView.findViewById(R.id.receiver_detail);
+            view.setText(mItem.content);
+            view.setMovementMethod(new ScrollingMovementMethod());
          }
       }
 
@@ -202,6 +205,7 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
          onConnectionChange(mReceiverInfo.isConnected());
          onMuteChange(mReceiverInfo.isMuted());
          onVolumeChange(mReceiverInfo.getVolume());
+         onInputChange(mReceiverInfo.getSource());
       }
    }
    @Override
@@ -209,16 +213,21 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
       // FIXME - add logging to other fragment?
    }
 
+   private TextView mLogView;
    @Override
    public void onMessageReceived(String message, String response) {
-      // FIXME - add logging to other fragment?
+      if(!isCommandFragment && this.isVisible()) {
+         if(mLogView == null)
+            mLogView = (TextView)getActivity().findViewById(R.id.receiver_detail);
+         mLogView.setText(mLogView.getText() + "\n" + response);
+      }
    }
 
    @Override
    public void onInputChange(int sourceVal) {
       if(getView()!=null) {
          Spinner view = (Spinner)this.getView().findViewById(R.id.inputSelector);
-         Log.v("TJS","Received "+sourceVal);
+//         Log.v("TJS","Received Input: "+sourceVal);
          view.setSelection(sourceVal-IscpCommands.SOURCE_DVR);
       }
    }

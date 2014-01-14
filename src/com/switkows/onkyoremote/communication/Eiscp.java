@@ -78,11 +78,15 @@ public class Eiscp
   private int receiverPort_ = DEFAULT_EISCP_PORT;
 
   /** the socket for communication - the protocol spec says to use one socket connection AND HOLD ONTO IT for re-use. **/
-  private static Socket eiscpSocket_ = null;
+  private Socket eiscpSocket_ = null;
+  public Socket getSocket() { return eiscpSocket_;}
   /** the timeout in ms for socket reads. **/
-  private static int socketTimeOut_ = 500;
-  private static ObjectOutputStream out_ = null;
-  private static DataInputStream in_ = null;
+  private static final int socketTimeOut_ = 500;
+  private ObjectOutputStream out_ = null;
+  private DataInputStream in_ = null;
+  public DataInputStream getInputStream() {return in_;}
+
+
   private boolean connected_ = false;
 
   @SuppressWarnings("unused")
@@ -91,27 +95,6 @@ public class Eiscp
   /** Var to hold the volume level to or from a message. **/
   private float volume_ = 32;
   
-  /** Simple class Constructor (using deafult IP and port) that gets all the class command constants set-up along with their command lookup maps (commandNameMap_ and commandMap_) . **/
-  public Eiscp()
-  {
-    //initCommandMap();
-  }
-
-
-  /** Constructor that takes your receivers ip and default port, gets all the class command 
-   * constants set-up along with their command lookup maps (commandNameMap_ and commandMap_) . 
-   **/
-  public Eiscp(String ip)
-  {
-    //initCommandMap();
-    if (ip==null || ip.equals("")) 
-      receiverIP_=DEFAULT_EISCP_IP;
-    else 
-      receiverIP_=ip;
-    receiverPort_=DEFAULT_EISCP_PORT;
-  }
-
-
   /** Constructor that takes your receivers ip and port,  gets all the class command 
    * constants set-up along with their command lookup maps (commandNameMap_ and commandMap_) . 
    **/
@@ -157,12 +140,6 @@ public class Eiscp
    * Connects to the receiver by opening a socket connection through the DEFaULT IP and DEFAULT eISCP port.
    **/
    public boolean connectSocket() { return connectSocket(null, -1);}
-
-
-  /**
-   * Connects to the receiver by opening a socket connection through the DEFAULT eISCP port.
-   **/
-   public boolean connectSocket(String ip) { return connectSocket(ip,-1);}
 
 
   /**
@@ -227,7 +204,7 @@ public class Eiscp
    * @param str holding the string to convert to HEX
    * @return a string holding the HEX representation of the passed in decimal str.
    **/
-  public String convertStringToHex(String str)
+  public static String convertStringToHex(String str)
   {
      return convertStringToHex( str, false);
   }
@@ -238,7 +215,7 @@ public class Eiscp
    * @param dumpOut flag to turn some debug output on/off
    * @return a string holding the HEX representation of the passed in str.
    **/
-  public String convertStringToHex(String str,  boolean dumpOut)
+  public static String convertStringToHex(String str,  boolean dumpOut)
   {
     char[] chars = str.toCharArray();
     String out_put = "";
@@ -289,59 +266,6 @@ public class Eiscp
   {
     char[] chars = str.toCharArray();
     return convertHexNumberStringToDecimal(chars, dumpOut);
-  }
-
-
-  /** Converts a hex byte to an ascii String.
-   * @param hex byte holding the HEX string to convert back to decimal
-   * @return a string holding the HEX representation of the passed in str.
-   **/
-  public String convertHexToString(byte hex)
-  {
-    byte [] bytes = {hex};
-    return convertHexToString( new String(bytes), false);
-  }
-
-
-  /** Converts a hex String to an ascii String.
-   * @param hex the HEX string to convert back to decimal
-   * @return a string holding the HEX representation of the passed in str.
-   **/
-  public String convertHexToString(String hex)
-  {
-    return convertHexToString( hex, false);
-  }
-
-
-  /** Converts a hex String to an ascii String.
-   * @param hex the HEX string to convert backk to decimal
-   * @param dumpOut boolean flag to turn some debug output on/off
-   * @return a string holding the HEX representation of the passed in str.
-   **/
-  public String convertHexToString(String hex,  boolean dumpOut)
-  {
-
-    StringBuilder sb = new StringBuilder();
-    StringBuilder temp = new StringBuilder();
-    String out_put = "";
-
-    if (dumpOut) System.out.print("    Hex: ");
-    //49204c6f7665204a617661 split into two characters 49, 20, 4c...
-    for( int i=0; i<hex.length()-1; i+=2 ){
-
-        //grab the hex in pairs
-        out_put = hex.substring(i, (i + 2));
-        if (dumpOut) System.out.print("0x"+out_put+" ");
-        //convert hex to decimal
-        int decimal = Integer.parseInt(out_put, 16);
-        //convert the decimal to character
-        sb.append((char)decimal);
-
-        temp.append(decimal);
-    }
-    if (dumpOut) debugMessage("    Decimal : " + temp.toString());
-
-    return sb.toString();
   }
 
 
@@ -470,31 +394,6 @@ public class Eiscp
   }
 
 
-  /**
-    * Sends to command to the receiver and then waits for the response(s) <br />and returns all response packetMessages <br />and closes the socket.
-    *
-    * @param command must be one of the Command Class Constants from the eiscp.Eiscp.Command class.
-    * @return the response to the command
-    **/
-  public String sendQueryCommand(int command)
-  {
-    return sendQueryCommand( command,  true, true);
-  }
-  
-  
-  /**
-    * Sends to command to the receiver and then waits for the response(s) <br />and returns all response packetMessages.
-    *
-    * @param command must be one of the Command Class Constants from the eiscp.Eiscp.Command class.
-    * @param closeSocket flag to close the connection when done or leave it open.
-    * @return the response to the command
-    **/
-  public String sendQueryCommand(int command, boolean closeSocket)
-  {
-    return sendQueryCommand( command,  closeSocket, true);
-  }
-  
-  
   /**
     * Sends to command to the receiver and then waits for the response(s). The responses often have nothing to do with the command sent
     * so this method can filter them to return only the responses related to the command sent.
@@ -665,6 +564,9 @@ public class Eiscp
           errorMessage("Remaining message: '"+packetData.substring(responseByteCnt-14)+"'");
           debugMessage("Start of message within packet: " + (responseByteCnt-14));
           debugMessage("Full Packet: '"+packetData+"'");
+          debugMessage("Full Packet(hex):"+convertStringToHex(packetData)+"");
+          for(String message : retVal)
+             debugMessage("   Successfully parsed : " + message);
        } else
           dataMessage = new char [dataSizeDecimal];
        
@@ -683,20 +585,32 @@ public class Eiscp
        // NOTE: the end of packet char (0x1A) for a response message is DIFFERENT that the sent message
        // NOTE: ITs also different than what is in the Onkyo eISCP docs
        // NR-5008 sends 3 chars to terminate the packet - 0x1a 0x0d 0x0a
-       endChar1 = responseChars[responseByteCnt++];
-       endChar2 = responseChars[responseByteCnt++];
-       endChar3 = responseChars[responseByteCnt++];
-       if (endChar1 == (char)Integer.parseInt("1A", 16) &&
-           endChar2 == (char)Integer.parseInt("0D", 16) &&
-           endChar3 == (char)Integer.parseInt("0A", 16) 
-          ) {
+       if(responseByteCnt + 3 < responseChars.length){ 
+          endChar1 = responseChars[responseByteCnt++];
+          endChar2 = responseChars[responseByteCnt++];
+          endChar3 = responseChars[responseByteCnt++];
+          if (endChar1 == (char)Integer.parseInt("1A", 16) &&
+              endChar2 == (char)Integer.parseInt("0D", 16) &&
+              endChar3 == (char)Integer.parseInt("0A", 16) 
+             ) {
+             if (debugging)
+                debugMessage(" EndOfPacket["+packetCounter+"]\n");
+          }
+          else
+             break;//if we don't find the correct end of packet frame, abort
+          //trim padding bytes (my receiver (TX-NR809) seems to add extra words to increase ISCP message to 16-byte boundaries?)
+          while(responseByteCnt < responseChars.length && responseChars[responseByteCnt]==(char)Integer.parseInt("0",16)) {
+             responseByteCnt++;//throw away padding zeros
+          }
+       } else {
           if (debugging)
              debugMessage(" EndOfPacket["+packetCounter+"]\n");
+          break;
        }
-       else
-          break;//if we don't find the correct end of packet frame, abort
        packetCounter++;
      }
+     if(retVal.size() > 1)
+        Log.v("TJS","Returned > 1 ISCP message in this iteration! " + retVal.size());
      return retVal;
   }
 

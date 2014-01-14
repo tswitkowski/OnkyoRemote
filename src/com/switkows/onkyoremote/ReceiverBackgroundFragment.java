@@ -145,26 +145,6 @@ public class ReceiverBackgroundFragment extends Fragment implements CommandHandl
       }
    }
    
-   /***
-    * Async task which runs indefinitely(?) listening to server for status updates
-    * 
-    * @author Trevor
-    *
-    */
-   private class BackgroundListenerTask extends AsyncTask<Void,Void,Void> {
-
-      @Override
-      protected Void doInBackground(Void... params) {
-         // TODO Auto-generated method stub
-         return null;
-      }
-      @Override
-      protected void onPostExecute(Void result) {
-         if(mCallbacks != null)
-            mCallbacks.onDiscoveryComplete();
-      }
-      
-   }
 
    @Override
    public void onMessageSent(String message) {

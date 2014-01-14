@@ -1,5 +1,10 @@
 package com.switkows.onkyoremote.communication;
 
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.net.Socket;
+import java.util.Vector;
+
 import android.os.AsyncTask;
 import android.support.v4.app.Fragment;
 import android.util.Log;
@@ -13,6 +18,7 @@ public class ReceiverClient extends Eiscp {
    public static final int DEFAULT_TCP_PORT   = Eiscp.DEFAULT_EISCP_PORT;
    public final CommandHandler mParent;
    private ReceiverInfo mInfo;
+   private ServerListener mServerListener;
 
    public ReceiverClient(Fragment parent, ReceiverInfo info) {
       this(parent,info.getIpAddr(),info.getTcpPort());
@@ -32,7 +38,6 @@ public class ReceiverClient extends Eiscp {
     * Initializes variables (like power status, input selection, volume, etc)
     * and opens the socket to the server (AV Receiver)
     */
-   //FIXME - does this need to be in its own async task? the queries are already performed in a separate task/thread, so this may not be needed
    public void initiateConnection() {
       new AsyncTask<Void,Void,Void>() {
          @Override
@@ -52,13 +57,18 @@ public class ReceiverClient extends Eiscp {
                Log.v("TJS","Querying Receiver status (power, volume, source, mute)..");
                query = new QueryServerTask(ReceiverClient.this);
                query.execute(commands);
+               //make sure to start this in the 'thread pool executor' since it will run
+               //indefinitely. Otherwise it would have blocked all other threads (namely:
+               //the above thread and any 'sendCommand' threads) from executing)
+               mServerListener = new ServerListener(ReceiverClient.this);
+               mServerListener.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, (Void)null);
             }
             return null;
          }
 
          @Override
          protected void onPostExecute(Void result) {
-            connectionStateChanged();//FIXME - will this execute too soon (i.e. before all queries are completed)?
+            connectionStateChanged();
             super.onPostExecute(result);
          }
       }.execute();
@@ -87,7 +97,7 @@ public class ReceiverClient extends Eiscp {
 
          @Override
          protected void onPostExecute(Void result) {
-            connectionStateChanged();//FIXME - will this execute too soon (i.e. before all queries are completed)?
+            connectionStateChanged();
             super.onPostExecute(result);
          }
       }.execute();
@@ -106,7 +116,7 @@ public class ReceiverClient extends Eiscp {
     * @param queryResult - message received from server (AV Receiver)
     */
    public void postQueryResults(String queryResult) {
-      Log.d("TJS","Query Result : '"+queryResult+"'...");
+//      Log.d("TJS","Query Result : '"+queryResult+"'...");
 //      String[] resultParnts = queryResult.split("/\n");
 //      if(queryResult.split(regularExpression))
       if(mParent != null ) {
@@ -121,11 +131,17 @@ public class ReceiverClient extends Eiscp {
          } else if(queryResult.contains("MVL")) {
             //Volume level decode
             String resultStr = queryResult.substring(3, 5);
-            float value = (float)Integer.parseInt(resultStr,16);
-            Log.v("TJS","Volume query result = '"+value+"'");
-            setVolume(value);
-            mInfo.setVolume(value);//FIXME - clean up
-            mParent.onVolumeChange(value);
+            try {
+               float value;
+               value = (float)Integer.parseInt(resultStr,16);
+               Log.v("TJS","Volume query result = '"+value+"'");
+               setVolume(value);
+               mInfo.setVolume(value);//FIXME - clean up
+               mParent.onVolumeChange(value);
+            } catch (NumberFormatException e) {
+               //if we get an unknown number (ex. 'N/A' sometimes comes back?!)
+               Log.v("ReceiverClient", "Unknown Volume command. Ignoring: "+queryResult);
+            }
          } else if(queryResult.contains("AMT")) {
             //Muted status decode
             String resultStr = queryResult.substring(3, 5);
@@ -143,11 +159,16 @@ public class ReceiverClient extends Eiscp {
                mParent.onInputChange(input);
                mInfo.setSource(input);
             }
+         } else {
+            Log.d("ReceiverClient","Unhandled message: "+queryResult);
          }
       }
+      Log.i("TJS","Got result in Background Thread: '" + queryResult + "'...");
+      Log.d("TJS"," in hex                        : '" + Eiscp.convertStringToHex(queryResult)+"'...");
+      mParent.onMessageReceived(null, queryResult);
    }
 
-   //FIXME - does not properly return isConnected value after thread completes
+
    public boolean closeSocket() {
       new AsyncTask<Void,Void,Void>() {
          @Override
@@ -160,7 +181,7 @@ public class ReceiverClient extends Eiscp {
             connectionStateChanged();
          }
       }.execute();
-      return false;//FIXME - return value not truly returned to caller
+      return false;
    }
 
    public boolean getPoweredOn() {
@@ -176,31 +197,105 @@ public class ReceiverClient extends Eiscp {
 //      Log.v("ReceiverClient",message);
 //   }
    
-   protected class QueryServerTask extends AsyncTask<String, Void, String[]> {
+   /***
+    * Sends commands to the server in a background thread
+    * Note : though it says it is a 'query', it does not actually collect
+    *        information, it only sends the commands. You must install the
+    *        ServerListener to read/interpret the Server response(s)
+    * @author Trevor
+    *
+    */
+   protected class QueryServerTask extends AsyncTask<String, Void, Void> {
 
       private final ReceiverClient mParent;
       public QueryServerTask(ReceiverClient parent) {
          mParent = parent;
       }
       @Override
-      protected String[] doInBackground(String... params) {
-         //FIXME - pass in 'close' flag, somehow
-         String[] results = new String[params.length];
+      protected Void doInBackground(String... params) {
          for(int i = 0 ; i < params.length ; i++) {
             Log.v("TJSAsync","Sending query : " + params[i]);
             int command = Integer.parseInt(params[i]);
-            results[i] = mParent.sendQueryCommand(command,false,false);
+            mParent.sendCommand(command,false);
          }
-         return results;
+         return null;
+      }
+   }
+
+   /***
+    * Async task which runs indefinitely(?) listening to server for status updates
+    * 
+    * @author Trevor
+    *
+    */
+   public class ServerListener extends AsyncTask<Void,String,Void> {
+      private final ReceiverClient mParent;
+      public ServerListener(ReceiverClient parent) {
+         mParent = parent;
       }
 
       @Override
-      protected void onPostExecute(String results[]) {
-         for(String result : results) {
-            Log.v("TJSAsync","Got result: '" + result + "'...");
+      protected void onPostExecute(Void result) {
+         // Note : This method should not be called, probably.
+         Log.d("TJS","ServerListener has finished...");
+         super.onPostExecute(result);
+      }
+
+      @Override
+      protected void onProgressUpdate(String... values) {
+         //Note : I think we should only ever get one string in this method
+         for(String result : values) {
+//            Log.i("TJS","Got result in Background Thread: '" + result + "'...");
             mParent.postQueryResults(result);
          }
-         super.onPostExecute(results);
+         super.onProgressUpdate(values);
+      }
+
+      @Override
+      protected Void doInBackground(Void... params) {
+         DataInputStream iStream = mParent.getInputStream();
+         Socket socket = mParent.getSocket();
+         byte [] buffer = new byte[64];
+         int numReceived = 0;
+         boolean debugging = true;
+         int totBytesReceived = 0;
+         int packetCounter = 0;
+         while(socket.isConnected()) {
+            try {
+               numReceived = iStream.read(buffer);
+               if(numReceived > 0) {
+                  totBytesReceived = 0;
+                  StringBuilder msgBuffer = new StringBuilder("");
+                  if (debugging) debugMessage(" Packet"+"["+packetCounter+"]:");
+                  
+                  /* Read ALL the incoming Bytes and buffer them */ 
+                  // *******************************************
+                  if (debugging) debugMessage("numBytesReceived = "+numReceived);
+                  while(numReceived>0 )
+                  {
+                    totBytesReceived+=numReceived;
+                    msgBuffer.append(new String(buffer));
+                    buffer = new byte[32];
+                    numReceived = 0;
+                    if (iStream.available()>0)
+                      numReceived = iStream.read(buffer);
+                    if (debugging) System.out.print(" "+numReceived);
+                  }
+//                  if(debugging)
+//                     debugMessage("numBytesReceived = "+numBytesReceived+", totBytesReceived = "+totBytesReceived+", message.length = "+msgBuffer.toString().length());
+
+                  //push rest of parsing to sub-method (note: string MUST be totBytesReceived long)
+                  Vector<String> currentMessages = parsePacketBytes(msgBuffer.toString().substring(0, totBytesReceived), false);
+                  for(String message : currentMessages)
+                     publishProgress(message);
+                  Log.d("TJS","Packet data complete...");
+               }
+            } catch (IOException e) {
+               Log.i("ReceiverClient","Socket closed. killing Listener thread");
+               break;
+            }
+         }
+         return null;
       }
    }
    
