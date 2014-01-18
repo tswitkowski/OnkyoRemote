@@ -111,6 +111,11 @@ public class ReceiverClient extends Eiscp {
       return command != mInfo.getSource();
    }
 
+   public void setVolumeFrozen(boolean volumeFrozen) {
+      mInfo.setVolumeFrozen(volumeFrozen);
+   }
+
+
    /***
     * Runs on GUI thread. Gives feedback to GUI and stores state to our object
     * @param queryResult - message received from server (AV Receiver)
@@ -137,7 +142,8 @@ public class ReceiverClient extends Eiscp {
                Log.v("TJS","Volume query result = '"+value+"'");
                setVolume(value);
                mInfo.setVolume(value);//FIXME - clean up
-               mParent.onVolumeChange(value);
+               if(!mInfo.isVolumeFrozen())
+                  mParent.onVolumeChange(value);
             } catch (NumberFormatException e) {
                //if we get an unknown number (ex. 'N/A' sometimes comes back?!)
                Log.v("ReceiverClient", "Unknown Volume command. Ignoring: "+queryResult);
@@ -165,7 +171,8 @@ public class ReceiverClient extends Eiscp {
       }
       Log.i("TJS","Got result in Background Thread: '" + queryResult + "'...");
       Log.d("TJS"," in hex                        : '" + Eiscp.convertStringToHex(queryResult)+"'...");
-      mParent.onMessageReceived(null, queryResult);
+      if(mParent != null)
+         mParent.onMessageReceived(null, queryResult);
    }
 
 
@@ -197,6 +204,15 @@ public class ReceiverClient extends Eiscp {
 //      Log.v("ReceiverClient",message);
 //   }
    
+   /***
+    * Converts an ISCP message to something that is human-readable
+    * (i.e. converts non-printable ASCII characters to hexadecimal)
+    * @param message ISCP message
+    * @return altered {@link message} with non-printable ASCII characters converted to hex
+    */
+   public static String messageToPrintable(String message) {
+      return Eiscp.convertStringToHex(message, true, false);
+   }
    /***
     * Sends commands to the server in a background thread
     * Note : though it says it is a 'query', it does not actually collect
@@ -326,5 +342,6 @@ public class ReceiverClient extends Eiscp {
       public void sendQueryCommand(int command);
       public boolean toggleConnection();
       public void setVolume(float volume);
+      public void setVolumeTracked(boolean isTracked);
    }
 }

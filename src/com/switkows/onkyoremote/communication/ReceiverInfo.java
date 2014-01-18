@@ -23,6 +23,10 @@ public class ReceiverInfo {
    private boolean isConnected;
    private int     source;
    
+   //flag to indicate volume should not be updated by any message received from the Server
+   //This should be set to TRUE when the user is currently updating the volume (from a slider, for example)
+   private boolean volumeFrozen;
+
    public ReceiverInfo(String ip, String port, String model, String region, String id) {
       ipAddr = ip;
       tcpPort = Integer.parseInt(port);
@@ -51,7 +55,16 @@ public class ReceiverInfo {
    }
 
    public void setVolume(float volume) {
-      this.volume = volume;
+      if(!volumeFrozen)
+         this.volume = volume;
+   }
+
+   public boolean isVolumeFrozen() {
+      return volumeFrozen;
+   }
+
+   public void setVolumeFrozen(boolean volumeFrozen) {
+      this.volumeFrozen = volumeFrozen;
    }
 
    public boolean isPoweredOn() {

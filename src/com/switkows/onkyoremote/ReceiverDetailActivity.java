@@ -72,7 +72,8 @@ public class ReceiverDetailActivity extends FragmentActivity implements Receiver
          
          fm.beginTransaction().add(mBackgroundFragment, "background_frag").commit();
       }
-      mCommandFragment.setReceiverInfo(getReceiverInfo());//update state of child fragment (mainly for orientation changes)
+      if(mCommandFragment != null)
+         mCommandFragment.setReceiverInfo(getReceiverInfo());//update state of child fragment (mainly for orientation changes)
    }
 
    @Override
@@ -159,7 +160,13 @@ public class ReceiverDetailActivity extends FragmentActivity implements Receiver
 
    @Override
    public void onDiscoveryComplete() {
-      // TODO Auto-generated method stub
-      mCommandFragment.setReceiverInfo(getReceiverInfo()); 
-      
-   }}
+      if(mCommandFragment != null)
+         mCommandFragment.setReceiverInfo(getReceiverInfo()); 
+   }
+
+   @Override
+   public void setVolumeTracked(boolean isTracked) {
+      if(mBackgroundFragment != null)
+         mBackgroundFragment.setVolumeTracked(isTracked); 
+   }
+}

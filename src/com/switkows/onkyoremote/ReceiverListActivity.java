@@ -201,4 +201,9 @@ public class ReceiverListActivity extends FragmentActivity implements ReceiverLi
    public void setVolume(float volume) {
       mBackgroundFragment.setVolume(volume);
    }
+
+   @Override
+   public void setVolumeTracked(boolean isTracked) {
+      mBackgroundFragment.setVolumeTracked(isTracked);
+   }
 }

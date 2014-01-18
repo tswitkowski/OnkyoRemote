@@ -155,7 +155,7 @@ public class ReceiverBackgroundFragment extends Fragment implements CommandHandl
    @Override
    public void onMessageReceived(String message, String response) {
       if(mCommandCallbacks != null)
-         mCommandCallbacks.onMessageReceived(message,response);
+         mCommandCallbacks.onMessageReceived(message,ReceiverClient.messageToPrintable(response));
    }
 
    @Override
@@ -231,6 +231,14 @@ public class ReceiverBackgroundFragment extends Fragment implements CommandHandl
          client.setVolume(volume);
          //now send command to server
          client.sendCommand(IscpCommands.VOLUME_SET);
+      }
+   }
+
+   @Override
+   public void setVolumeTracked(boolean isTracked) {
+      ReceiverClient client = getReceiverClient(0);//FIXME - allow for control
+      if(client!=null) {
+         client.setVolumeFrozen(isTracked);
       }
    }
 }

@@ -206,16 +206,22 @@ public class Eiscp
    **/
   public static String convertStringToHex(String str)
   {
-     return convertStringToHex( str, false);
+     return convertStringToHex( str, false, false);
   }
 
 
   /** Converts an ascii decimal String to a hex  String.
    * @param str holding the string to convert to HEX
+   * @param onlyNonPrintable if true, leave ASCII characters as-is, but convert non-printable characters to space-separated hex numbers
    * @param dumpOut flag to turn some debug output on/off
    * @return a string holding the HEX representation of the passed in str.
    **/
-  public static String convertStringToHex(String str,  boolean dumpOut)
+  /**
+ * @param str
+ * @param dumpOut
+ * @return
+ */
+public static String convertStringToHex(String str, boolean onlyNonPrintable, boolean dumpOut)
   {
     char[] chars = str.toCharArray();
     String out_put = "";
@@ -225,8 +231,16 @@ public class Eiscp
     StringBuffer hex = new StringBuffer();
     for(int i = 0; i < chars.length; i++)
     {
-      out_put = Integer.toHexString((int)chars[i]);
-      if (out_put.length()==1) hex.append("0");
+       if(!onlyNonPrintable || ((int)chars[i])<32 || ((int)chars[i]>126)) {
+          //convert to two-character HEX number
+          out_put = Integer.toHexString((int)chars[i]);
+          if (out_put.length()==1) out_put = "0" + out_put;
+          if(onlyNonPrintable)
+             out_put = " 0x" + out_put + " ";
+       }
+      else
+         //leave character as-is
+         out_put = Character.toString(chars[i]);
       hex.append(out_put);
       if (dumpOut) System.out.print("0x"+(out_put.length()==1?"0":"")+ out_put+" ");
     }
@@ -376,7 +390,7 @@ public class Eiscp
       try
       {
         debugMessage("  sending "+sb.length() +" chars: ");
-        convertStringToHex(sb.toString(), true);
+        debugMessage(convertStringToHex(sb.toString(), true, true));
         //out_.writeObject(sb.toString());
         //out_.writeChars(sb.toString());
         out_.writeBytes(sb.toString());  // <--- This is the one that works

@@ -6,7 +6,6 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.text.method.ScrollingMovementMethod;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -16,10 +15,10 @@ import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemSelectedListener;
-import android.widget.Button;
+import android.widget.ArrayAdapter;
 import android.widget.CompoundButton;
 import android.widget.CompoundButton.OnCheckedChangeListener;
-import android.widget.LinearLayout;
+import android.widget.GridView;
 import android.widget.SeekBar;
 import android.widget.SeekBar.OnSeekBarChangeListener;
 import android.widget.Spinner;
@@ -48,6 +47,12 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
    public static final String     ARG_ITEM_ID = "item_id";
    public static final String     ARG_IP_ADDR = "ip_addr";
    public static final String     ARG_TCP_PORT= "tcp_port";
+
+   private final static String[] BUTTON_LABELS = {"Power Off","Power On","Volume -", "Volume +", "Up", "Down",
+                                                  "Left", "Right", "Enter", "Exit", "Menu"};
+   private final int[] BUTTON_COMMANDS = {IscpCommands.POWER_OFF, IscpCommands.POWER_ON, IscpCommands.VOLUME_DOWN, IscpCommands.VOLUME_UP, IscpCommands.DIRECTION_UP, IscpCommands.DIRECTION_DOWN,
+                                          IscpCommands.DIRECTION_LEFT, IscpCommands.DIRECTION_RIGHT, IscpCommands.BUTTON_ENTER, IscpCommands.BUTTON_EXIT, IscpCommands.BUTTON_MENU};
+
    //FIXME - split to different fragments (one for commands, one for console output
    //        but since this is a demo (i.e. non-final implementation), this is okay, maybe forever
    private boolean isCommandFragment;
@@ -165,23 +170,32 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
          ((ToggleButton)view).setOnCheckedChangeListener(new MuteListener(this));
 
          //dynamically add buttons (saves copy/paste in layout file as well as attaching event handlers)
-         LinearLayout layout = (LinearLayout)rootView.findViewById(R.id.buttons);
-         String[] labels = {"Power On","Power Off","Volume Up", "Volume Down", "Up", "Down",
-                            "Left", "Right", "Enter", "Exit", "Menu"};
-         final int[] commands = {IscpCommands.POWER_ON, IscpCommands.POWER_OFF, IscpCommands.VOLUME_UP, IscpCommands.VOLUME_DOWN, IscpCommands.DIRECTION_UP, IscpCommands.DIRECTION_DOWN,
-                                 IscpCommands.DIRECTION_LEFT, IscpCommands.DIRECTION_RIGHT, IscpCommands.BUTTON_ENTER, IscpCommands.BUTTON_EXIT, IscpCommands.BUTTON_MENU};
-         for(int i=0 ; i < labels.length ; i++) {
-            Button button = new Button(container.getContext());
-            button.setText(labels[i]);
-            button.setId(commands[i]);
-            button.setOnClickListener(new OnClickListener() {
-               @Override
-               public void onClick(View v) {
-                  mCommandSender.sendCommand(v.getId(), true);
+         GridView layout = (GridView)rootView.findViewById(R.id.buttons);
+         layout.setAdapter(new ArrayAdapter<String>(rootView.getContext(), R.layout.simple_button_layout, R.id.simple_button, BUTTON_LABELS) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+               View retView = super.getView(position, convertView, parent);
+               if(retView!=null) {
+                  retView.setTag(getItemId(position));
+                  //FIXME - only set once to a single instance of the listener?
+                  //FIXME - add longClick for volume up/down/arrow buttons
+                  retView.setOnClickListener(new OnClickListener() {
+                     /***
+                      * Define listener for button click events
+                      */
+                     @Override
+                     public void onClick(View v) {
+                        if(v.getTag() instanceof Long) {
+                           long id = (Long)v.getTag();
+                           if(id < BUTTON_COMMANDS.length && mCommandSender != null)
+                              mCommandSender.sendCommand(BUTTON_COMMANDS[(int)id], true);
+                        }
+                     }
+                  });
                }
-            });
-            layout.addView(button);
-         }
+               return retView;
+            }
+         });
       }
       else {
          rootView = inflater.inflate(R.layout.fragment_receiver_detail, container, false);
@@ -317,15 +331,14 @@ public class ReceiverDetailFragment extends Fragment implements CommandHandler {
       }
       @Override
       public void onStartTrackingTouch(SeekBar seekBar) {
-         // TODO Auto-generated method stub
-
+         mCommandSender.setVolumeTracked(true);
       }
       @Override
       public void onStopTrackingTouch(SeekBar seekBar) {
-         // TODO Auto-generated method stub
-
+         mCommandSender.setVolumeTracked(false);
       }
    }
+   
    @Override
    public ReceiverInfo getReceiverInfo() {
       // TODO Auto-generated method stub
